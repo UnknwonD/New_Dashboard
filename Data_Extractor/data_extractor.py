@@ -14,7 +14,46 @@ CATEGORY = {
     104 : ['731', '226', '227', '230', '732', '283', '229', '228']
 }
 
-def data_extract(category: int):
+sub_dict = {
+    264: '대통령실',
+    265: '국회/정당',
+    268: '북한',
+    266: '행정',
+    267: '국방/외교',
+    269: '정치일반',
+    
+    259: '금융',
+    258: '증권',
+    261: '산업/재계',
+    771: '중기/벤처',
+    260: '부동산',
+    262: '글로벌 경제',
+    310: '생활경제',
+    263: '경제 일반',
+    
+249: '사건사고',
+250: '교육',
+251: '노동',
+254: '언론',
+252: '환경',
+'59b': '인권/복지',
+255: '식품/의료',
+
+256: '지역',
+276: '인물',
+257사회 일반
+}
+
+
+cat_dict = {
+    100:'정치',
+    101:'경제',
+    102:'사회',
+    103:'생활/문화',
+    104:'IT/과학'
+}
+
+for category in [100, 101, 102, 103, 104]:
     for sub in CATEGORY[category]:
         base_url = 'https://news.naver.com/breakingnews/section/' + str(category) + '/' + sub
         print(base_url)
@@ -31,7 +70,7 @@ def data_extract(category: int):
         soup = BeautifulSoup(html, 'html.parser')
 
         news_body = soup.select('div.section_article')
-
+        
         for news in news_body:
             contents = news.select('li.sa_item')
             for content in contents: 
@@ -41,7 +80,13 @@ def data_extract(category: int):
                 date = content.select_one('div.sa_text_datetime > b').text if content.select_one('div.sa_text_datetime > b') else "No date"
                 
                 print(title, detail, publisher, date)
+                row = {
+                    'category': cat_dict[category],
+                    'sub-category': '',
+                    'title': title,
+                    'content': detail,
+                    'publisher': publisher,
+                    'date': date
+                }
 
-    driver.quit()
-
-data_extract(100)
+driver.quit()
