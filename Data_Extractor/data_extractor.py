@@ -116,7 +116,7 @@ while True:
             driver.get(base_url)
             time.sleep(3)
 
-            for _ in range(30):
+            for _ in range(100):
                 try:
                     driver.find_element(By.CSS_SELECTOR, 'a.section_more_inner').click()
                 except:
@@ -136,7 +136,6 @@ while True:
                     detail = content.select_one('div.sa_text_lede').text if content.select_one('div.sa_text_lede') else "No details"
                     publisher = content.select_one('div.sa_text_press').text if content.select_one('div.sa_text_press') else "No publisher"
                     date = content.select_one('div.sa_text_datetime > b').text if content.select_one('div.sa_text_datetime > b') else "No date"
-
                     row = {
                         'category': cat_dict[category],
                         'sub-category': sub_dict[sub],
@@ -152,13 +151,13 @@ while True:
     new_data_df = pd.DataFrame(news_data)
     df = pd.concat([df, new_data_df], ignore_index=True)
     
-    df.drop_duplicates(subset='title', keep='first')
+    df.drop_duplicates(subset='title', keep='first', inplace=True)
     cnt += 1
 
     try:
         df.to_csv('news_data.csv', index=False, encoding='utf-8-sig')
     except:
-        ...
+        print('데이터 저장 실패')
 
     print(f'''
 [{cnt}회 수집 결과]
@@ -166,3 +165,6 @@ while True:
 종료시간 : {datetime.now()}
 data 수집된 개수 : {len(df)}
     ''')
+
+    print('1시간 뒤에 다시 수집합니다...')
+    time.sleep(3600)
