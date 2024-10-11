@@ -87,50 +87,72 @@ def str_to_date(phrase):
     
     return result_time.strftime('%Y-%m-%d %H:%M')
 
-news_data = []
+df = pd.read_csv('news_data.csv', encoding='utf-8-sig')
 
-for category in [100, 101, 102, 103, 104]:
-    for sub in CATEGORY[category]:
-        base_url = 'https://news.naver.com/breakingnews/section/' + str(category) + '/' + sub
-        print(base_url)
+cnt = 0
 
-        driver = webdriver.Chrome()
-        driver.get(base_url)
-        time.sleep(3)
+while True:
+    news_data = []
+    start_time = datetime.now()
 
-        for _ in range(3):
-            try:
-                driver.find_element(By.CSS_SELECTOR, 'a.section_more_inner').click()
-            except:
-                ...
-            finally:
-                time.sleep(1)
+    for category in [100, 101, 102, 103, 104]:
+        for sub in CATEGORY[category]:
+            base_url = 'https://news.naver.com/breakingnews/section/' + str(category) + '/' + sub
+            print(base_url)
 
-        html = driver.page_source
-        soup = BeautifulSoup(html, 'html.parser')
+            driver = webdriver.Chrome()
+            driver.get(base_url)
+            time.sleep(3)
 
-        news_body = soup.select('div.section_article')
+            for _ in range(30):
+                try:
+                    driver.find_element(By.CSS_SELECTOR, 'a.section_more_inner').click()
+                except:
+                    break
+                finally:
+                    time.sleep(1)
 
-        for news in news_body:
-            contents = news.select('li.sa_item')
-            for content in contents:
-                title = content.select_one('a.sa_text_title > strong').text if content.select_one('a.sa_text_title > strong') else "No title"
-                detail = content.select_one('div.sa_text_lede').text if content.select_one('div.sa_text_lede') else "No details"
-                publisher = content.select_one('div.sa_text_press').text if content.select_one('div.sa_text_press') else "No publisher"
-                date = content.select_one('div.sa_text_datetime > b').text if content.select_one('div.sa_text_datetime > b') else "No date"
+            html = driver.page_source
+            soup = BeautifulSoup(html, 'html.parser')
 
-                row = {
-                    'category': cat_dict[category],
-                    'sub-category': sub_dict[sub],
-                    'title': title,
-                    'content': detail,
-                    'publisher': publisher,
-                    'date': str_to_date(date)
-                }
+            news_body = soup.select('div.section_article')
 
-                news_data.append(row)
+            for news in news_body:
+                contents = news.select('li.sa_item')
+                for content in contents:
+                    title = content.select_one('a.sa_text_title > strong').text if content.select_one('a.sa_text_title > strong') else "No title"
+                    detail = content.select_one('div.sa_text_lede').text if content.select_one('div.sa_text_lede') else "No details"
+                    publisher = content.select_one('div.sa_text_press').text if content.select_one('div.sa_text_press') else "No publisher"
+                    date = content.select_one('div.sa_text_datetime > b').text if content.select_one('div.sa_text_datetime > b') else "No date"
 
-        driver.quit()
-        
-df = pd.DataFrame(news_data)
-df.to_csv('news_data.csv', index=False, encoding='utf-8-sig')
+                    row = {
+                        'category': cat_dict[category],
+                        'sub-category': sub_dict[sub],
+                        'title': title,
+                        'content': detail,
+                        'publisher': publisher,
+                        'date': str_to_date(date)
+                    }
+                    
+                    news_data.append(row)
+
+            driver.quit()
+            
+    ### 여기서 news_data를 df에 넣는 코드로 수정
+    new_data_df = pd.DataFrame(news_data)
+    df = pd.concat([df, new_data_df], ignore_index=True)
+    
+    df.drop_duplicates(subset='title', keep='first')
+    cnt += 1
+
+    try:
+        df.to_csv('news_data.csv', index=False, encoding='utf-8-sig')
+    except:
+        ...
+
+    print(f'''
+[{cnt}회 수집 결과]
+시작시간 : {start_time}
+종료시간 : {datetime.now()}
+data 수집된 개수 : {len(df)}
+    ''')
