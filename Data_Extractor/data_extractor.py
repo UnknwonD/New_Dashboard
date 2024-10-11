@@ -5,6 +5,19 @@ from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 import pandas as pd
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+
+# 크롬 옵션 설정
+chrome_options = Options()
+chrome_options.add_argument("--headless")  # 창이 뜨지 않도록 설정
+chrome_options.add_argument("--no-sandbox")
+chrome_options.add_argument("--disable-dev-shm-usage")
+chrome_options.add_argument("--disable-extensions")
+chrome_options.add_argument("--disable-gpu")
+chrome_options.add_argument("log-level=3")  # 로그 레벨을 줄임
 
 CATEGORY = {
     100: ['264', '265', '266', '267', '268', '269'],
@@ -88,7 +101,7 @@ def str_to_date(phrase):
     return result_time.strftime('%Y-%m-%d %H:%M')
 
 df = pd.read_csv('news_data.csv', encoding='utf-8-sig')
-
+driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
 cnt = 0
 
 while True:
@@ -100,7 +113,6 @@ while True:
             base_url = 'https://news.naver.com/breakingnews/section/' + str(category) + '/' + sub
             print(base_url)
 
-            driver = webdriver.Chrome()
             driver.get(base_url)
             time.sleep(3)
 
@@ -135,8 +147,6 @@ while True:
                     }
                     
                     news_data.append(row)
-
-            driver.quit()
             
     ### 여기서 news_data를 df에 넣는 코드로 수정
     new_data_df = pd.DataFrame(news_data)
