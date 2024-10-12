@@ -182,7 +182,8 @@ while True:
                         title=row['title'],
                         content=row['content'],
                         publisher=row['publisher'],
-                        date=row['date']
+                        date=row['date'],
+                        sentences = '-'
                     )
                     connection.execute(insert_query)
     except Exception as e:
