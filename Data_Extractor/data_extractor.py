@@ -11,11 +11,6 @@ from webdriver_manager.chrome import ChromeDriverManager
 from api import db_url
 
 
-# PostgreSQL 데이터베이스 연결 설정
-engine = create_engine(db_url)
-metadata = MetaData()
-metadata.reflect(engine)
-social_data_table = metadata.tables['social_data']
 
 # 크롬 옵션 설정
 chrome_options = Options()
@@ -110,6 +105,12 @@ cnt = 0
 
 total_data = len(df)
 while True:
+    # PostgreSQL 데이터베이스 연결 설정
+    engine = create_engine(db_url)
+    metadata = MetaData()
+    metadata.reflect(engine)
+    social_data_table = metadata.tables['social_data']
+
     news_data = []
     start_time = datetime.now()
 
