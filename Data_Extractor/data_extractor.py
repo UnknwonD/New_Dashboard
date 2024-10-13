@@ -156,6 +156,11 @@ while True:
     # 새로운 데이터를 DataFrame으로 생성
     new_data_df = pd.DataFrame(news_data)
 
+    query = "SELECT * FROM social_data"
+    df_existing = pd.read_sql(query, engine)
+    
+    df_new = new_data_df[~new_data_df['title'].isin(df_existing['title'])]
+
     # 기존 데이터와 중복 제거
     df = pd.concat([df, new_data_df], ignore_index=True)
     df.drop_duplicates(subset='title', keep='first', inplace=True)
@@ -167,27 +172,32 @@ while True:
         df.to_csv('news_data.csv', index=False, encoding='utf-8-sig')
     except:
         print('데이터 저장 실패')
-
+    
     try:
-        print('데이터를 수집합니다.')
-        # Database에 존재하지 않는 새로운 데이터만 삽입
-        with engine.connect() as connection:
-            for index, row in new_data_df.iterrows():
-                query = select(social_data_table.c.title).where(social_data_table.c.title == row['title'])
-                result = connection.execute(query).fetchone()
-                if not result: 
-                    insert_query = social_data_table.insert().values(
-                        category=row['category'],
-                        sub_category=row['sub_category'],
-                        title=row['title'],
-                        content=row['content'],
-                        publisher=row['publisher'],
-                        date=row['date'],
-                        sentences = '-'
-                    )
-                    connection.execute(insert_query)
-    except Exception as e:
-        print("데이터 업로드 과정 오류 발생 : ", e)
+        df_new.to_sql('social_data', engine, if_exists='append', index=False)
+    except:
+        print('sql 업데이트에 오류 발생함')
+
+    # try:
+    #     print('데이터를 수집합니다.')
+    #     # Database에 존재하지 않는 새로운 데이터만 삽입
+    #     with engine.connect() as connection:
+    #         for index, row in new_data_df.iterrows():
+    #             query = select(social_data_table.c.title).where(social_data_table.c.title == row['title'])
+    #             result = connection.execute(query).fetchone()
+    #             if not result: 
+    #                 insert_query = social_data_table.insert().values(
+    #                     category=row['category'],
+    #                     sub_category=row['sub_category'],
+    #                     title=row['title'],
+    #                     content=row['content'],
+    #                     publisher=row['publisher'],
+    #                     date=row['date'],
+    #                     sentences = '-'
+    #                 )
+    #                 connection.execute(insert_query)
+    # except Exception as e:
+    #     print("데이터 업로드 과정 오류 발생 : ", e)
 
     print(f'''
 [{cnt}회 수집 결과]
