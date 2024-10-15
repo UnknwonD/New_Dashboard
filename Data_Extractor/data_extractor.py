@@ -9,8 +9,10 @@ from selenium.webdriver.chrome.service import Service
 from sqlalchemy import create_engine, Table, MetaData, select
 from webdriver_manager.chrome import ChromeDriverManager
 # from api import db_url
-
-
+import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../DB_Update')))
+from DB_UPDATE_FIRST import update_data
 
 # 크롬 옵션 설정
 chrome_options = Options()
@@ -172,32 +174,11 @@ while True:
         df.to_csv('news_data.csv', index=False, encoding='utf-8-sig')
     except:
         print('데이터 저장 실패')
-    
-    # try:
-    #     df_new.to_sql('social_data', engine, if_exists='append', index=False)
-    # except:
-    #     print('sql 업데이트에 오류 발생함')
-
-    # try:
-    #     print('데이터를 수집합니다.')
-    #     # Database에 존재하지 않는 새로운 데이터만 삽입
-    #     with engine.connect() as connection:
-    #         for index, row in new_data_df.iterrows():
-    #             query = select(social_data_table.c.title).where(social_data_table.c.title == row['title'])
-    #             result = connection.execute(query).fetchone()
-    #             if not result: 
-    #                 insert_query = social_data_table.insert().values(
-    #                     category=row['category'],
-    #                     sub_category=row['sub_category'],
-    #                     title=row['title'],
-    #                     content=row['content'],
-    #                     publisher=row['publisher'],
-    #                     date=row['date'],
-    #                     sentences = '-'
-    #                 )
-    #                 connection.execute(insert_query)
-    # except Exception as e:
-    #     print("데이터 업로드 과정 오류 발생 : ", e)
+    try:
+        update_data(df)
+        print('DB 업데이트 성공')
+    except:
+        print('DB 업데이트 실패')
 
     print(f'''
 [{cnt}회 수집 결과]
