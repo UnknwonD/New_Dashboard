@@ -8,7 +8,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from sqlalchemy import create_engine, Table, MetaData, select
 from webdriver_manager.chrome import ChromeDriverManager
-from api import db_url
+# from api import db_url
 
 
 
@@ -106,10 +106,10 @@ cnt = 0
 total_data = len(df)
 while True:
     # PostgreSQL 데이터베이스 연결 설정
-    engine = create_engine(db_url)
-    metadata = MetaData()
-    metadata.reflect(engine)
-    social_data_table = metadata.tables['social_data']
+    # engine = create_engine(db_url)
+    # metadata = MetaData()
+    # metadata.reflect(engine)
+    # social_data_table = metadata.tables['social_data']
 
     news_data = []
     start_time = datetime.now()
@@ -156,10 +156,10 @@ while True:
     # 새로운 데이터를 DataFrame으로 생성
     new_data_df = pd.DataFrame(news_data)
 
-    query = "SELECT * FROM social_data"
-    df_existing = pd.read_sql(query, engine)
+    # query = "SELECT * FROM social_data"
+    # df_existing = pd.read_sql(query, engine)
     
-    df_new = new_data_df[~new_data_df['title'].isin(df_existing['title'])]
+    # df_new = new_data_df[~new_data_df['title'].isin(df_existing['title'])]
 
     # 기존 데이터와 중복 제거
     df = pd.concat([df, new_data_df], ignore_index=True)
@@ -173,10 +173,10 @@ while True:
     except:
         print('데이터 저장 실패')
     
-    try:
-        df_new.to_sql('social_data', engine, if_exists='append', index=False)
-    except:
-        print('sql 업데이트에 오류 발생함')
+    # try:
+    #     df_new.to_sql('social_data', engine, if_exists='append', index=False)
+    # except:
+    #     print('sql 업데이트에 오류 발생함')
 
     # try:
     #     print('데이터를 수집합니다.')
@@ -206,6 +206,7 @@ while True:
 전체 데이터 수 : {total_data}
 data 수집된 개수 : {new_data}
     ''')
+    cnt += 1
 
-    print('1시간 뒤에 다시 수집합니다...')
-    time.sleep(3600)
+    print('5시간 뒤에 다시 수집합니다...')
+    time.sleep(18000)
