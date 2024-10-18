@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import time
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
@@ -11,6 +13,14 @@ from webdriver_manager.chrome import ChromeDriverManager
 import os
 import sys
 from api import db_url
+from summarizer import Summarizer
+
+def extractive_summarize_korean_text(text, compression_ratio=0.5):
+    # BERT 기반 추출 요약 모델 생성
+    model = Summarizer()
+    summary = model(text, ratio=compression_ratio)
+    return summary
+
 
 # 크롬 옵션 설정
 chrome_options = Options()
@@ -37,14 +47,19 @@ def extract_content(url):
     driver.get(url)
     time.sleep(3)
 
-    article = driver.find_element(By.ID, 'dic_area')
-
-    print(article.text)
+    article = driver.find_element(By.ID, 'dic_area').text
 
     driver.quit()
 
+    summary = extractive_summarize_korean_text(article, compression_ratio=0.3)
+
+    print(summary)
+
 if __name__ == '__main__':
-    extract_content('https://n.news.naver.com/mnews/article/029/0002909582')
+    raw_text = extract_content('https://n.news.naver.com/mnews/article/029/0002909582')
+
+
+
 
     
         
