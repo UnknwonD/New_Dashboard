@@ -1,29 +1,23 @@
-from transformers import T5ForConditionalGeneration, T5Tokenizer
-import torch
+# -*- coding: utf-8 -*-
 
-def summarize_text(text, max_length=150, min_length=30):
-    # T5 모델과 토크나이저 불러오기
-    model_name = "t5-small"
-    tokenizer = T5Tokenizer.from_pretrained(model_name)
-    model = T5ForConditionalGeneration.from_pretrained(model_name)
+from summarizer import Summarizer
 
-    # 입력 텍스트를 요약 작업에 맞게 인코딩
-    input_text = "summarize: " + text
-    input_ids = tokenizer.encode(input_text, return_tensors="pt", max_length=512, truncation=True)
-
-    # 모델을 사용하여 요약 생성
-    summary_ids = model.generate(input_ids, max_length=max_length, min_length=min_length, length_penalty=2.0, num_beams=4, early_stopping=True)
-    summary = tokenizer.decode(summary_ids[0], skip_special_tokens=True)
-
+def extractive_summarize_korean_text(text, compression_ratio=0.5):
+    # BERT 기반 추출 요약 모델 생성
+    model = Summarizer()
+    summary = model(text, ratio=compression_ratio)
     return summary
 
 if __name__ == "__main__":
-    # 긴 텍스트를 입력받기
     text = """
-    인공지능(AI)은 컴퓨터 시스템이 인간처럼 사고하고 학습하며 문제를 해결할 수 있도록 설계된 기술입니다. 이는 다양한 기계 학습 기법과 딥러닝 알고리즘을 통해 발전하고 있으며, 오늘날 여러 산업 분야에서 중요한 역할을 하고 있습니다. 예를 들어, 의료 산업에서는 AI가 질병을 진단하고 새로운 치료법을 개발하는 데 도움을 주며, 자율주행차에서는 안전하고 효율적인 운전을 지원합니다. 또한, 고객 서비스, 금융 분석, 교육 등 여러 분야에서도 AI 기술이 사용되고 있습니다.
-    """
+    국가정보원은 “북한이 지난 8일부터 러시아 파병을 위한 특수부대 병력 이동을 시작했다”고 18일 밝혔다. 북한이 지상군을 대규모로 파병하는 것은 이번이 처음이다. 국제사회가 북·러 간 군사협력 강화를 우려하는 가운데 나온 이번 북한군 파병은 향후 한반도 안보 지형에도 막대한 영향을 미칠 것으로 보인다. 또 한·러 관계를 고려해 우크라이나에 비살상무기만 지원해왔던 정부의 방침에도 영향을 끼칠 것이란 전망이 나온다. 윤석열 대통령은 이날 긴급 국가안전보장회의(NSC)를 주재했다. 이후 대통령실은 “현 상황을 좌시하지 않고 국제사회와 공동으로 가용한 모든 수단을 동원해 나갈 것”이라며 강경 대응을 예고했다.
 
-    # 요약 수행
-    summary = summarize_text(text)
+국정원은 이날 기자단에 배포한 보도자료에서 “북한군의 동향을 밀착 감시하던 중 북한이 지난 8일부터 13일까지 러시아 해군 수송함을 통해 특수부대를 러시아 지역으로 수송하는 것을 포착, 북한군의 참전 개시를 확인했다”고 밝혔다. 이어 “러시아 태평양함대 소속 상륙함 4척 및 호위함 3척이 해당 기간 북한의 청진·함흥·무수단 인근 지역에서 특수부대원 1500여 명을 러시아 블라디보스토크로 1차 이송 완료했고, 조만간 2차 수송 작전이 진행될 예정”이라고 덧붙였다.
+
+이와 관련, 대북 소식통은 “북한군은 ‘폭풍군단’으로 불리는 최정예 특수작전부대인 11군단 소속 4개 여단(1만여 명 규모) 병력을 파병할 것으로 예상된다”고 말했다. 평남 덕천시에 주둔 중인 폭풍군단은 예하에 총 10개 여단(저격여단 3개, 경보병여단 4개, 항공육전여단 3개로 구성)을 두고 있으며, 수도권 및 후방 침투 임무 등을 수행하는 특수전 부대다. 국정원에 따르면 러시아 해군 함대(수송 지원)의 북한 해역 진입은 1990년 이후 처음이다. 또 러시아 공군 소속 AN-124 등 대형 수송기도 블라디보스토크와 평양을 수시로 오가고 있다고 한다.
+    """
+    
+    # 요약을 30%로 압축
+    summary = extractive_summarize_korean_text(text, compression_ratio=0.5)
     print("Original Text:\n", text)
     print("\nSummary:\n", summary)
