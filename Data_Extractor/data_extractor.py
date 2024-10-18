@@ -12,7 +12,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 import os
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../DB_Update')))
-from DB_UPDATE_FIRST import update_data
+from DB_UPDATE_FIRST import update_db
 
 # 크롬 옵션 설정
 chrome_options = Options()
@@ -107,12 +107,6 @@ cnt = 0
 
 total_data = len(df)
 while True:
-    # PostgreSQL 데이터베이스 연결 설정
-    # engine = create_engine(db_url)
-    # metadata = MetaData()
-    # metadata.reflect(engine)
-    # social_data_table = metadata.tables['social_data']
-
     news_data = []
     start_time = datetime.now()
 
@@ -140,28 +134,25 @@ while True:
             for news in news_body:
                 contents = news.select('li.sa_item')
                 for content in contents:
-                    title = content.select_one('a.sa_text_title > strong').text if content.select_one('a.sa_text_title > strong') else "No title"
-                    detail = content.select_one('div.sa_text_lede').text if content.select_one('div.sa_text_lede') else "No details"
-                    publisher = content.select_one('div.sa_text_press').text if content.select_one('div.sa_text_press') else "No publisher"
-                    date = content.select_one('div.sa_text_datetime > b').text if content.select_one('div.sa_text_datetime > b') else "No date"
+                    title = content.select_one('a.sa_text_title > strong').text if content.select_one('a.sa_text_title > strong') else "-"
+                    url = content.select_one('a.sa_text_title')['href'] if content.select_one('a.sa_text_title') else "-"
+                    detail = content.select_one('div.sa_text_lede').text if content.select_one('div.sa_text_lede') else "-"
+                    publisher = content.select_one('div.sa_text_press').text if content.select_one('div.sa_text_press') else "-"
+                    date = content.select_one('div.sa_text_datetime > b').text if content.select_one('div.sa_text_datetime > b') else "-"
                     row = {
                         'category': cat_dict[category],
                         'sub_category': sub_dict[sub],
                         'title': title,
                         'content': detail,
                         'publisher': publisher,
-                        'date': str_to_date(date)
+                        'date': str_to_date(date),
+                        'url' : url,
                     }
                     
                     news_data.append(row)
 
     # 새로운 데이터를 DataFrame으로 생성
     new_data_df = pd.DataFrame(news_data)
-
-    # query = "SELECT * FROM social_data"
-    # df_existing = pd.read_sql(query, engine)
-    
-    # df_new = new_data_df[~new_data_df['title'].isin(df_existing['title'])]
 
     # 기존 데이터와 중복 제거
     df = pd.concat([df, new_data_df], ignore_index=True)
@@ -175,10 +166,10 @@ while True:
     except:
         print('데이터 저장 실패')
     try:
-        update_data(df)
+        update_db(df)
         print('DB 업데이트 성공')
-    except:
-        print('DB 업데이트 실패')
+    except Exception as e:
+        print('DB 업데이트 실패 : ', e)
 
     print(f'''
 [{cnt}회 수집 결과]
