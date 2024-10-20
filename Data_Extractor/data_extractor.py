@@ -8,6 +8,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from sqlalchemy import create_engine, Table, MetaData, select
 from webdriver_manager.chrome import ChromeDriverManager
+from summarizer import Summarizer
 # from api import db_url
 import os
 import sys
@@ -85,6 +86,12 @@ sub_dict = {
     '228': '과학 일반'
 }
 
+def extractive_summarize_korean_text(text, compression_ratio=0.5):
+    # BERT 기반 추출 요약 모델 생성
+    model = Summarizer()
+    summary = model(text, ratio=compression_ratio)
+    return summary
+
 def str_to_date(phrase):
     result_time = datetime.now()
 
@@ -139,6 +146,13 @@ while True:
                     detail = content.select_one('div.sa_text_lede').text if content.select_one('div.sa_text_lede') else "-"
                     publisher = content.select_one('div.sa_text_press').text if content.select_one('div.sa_text_press') else "-"
                     date = content.select_one('div.sa_text_datetime > b').text if content.select_one('div.sa_text_datetime > b') else "-"
+
+                    driver.get(url)
+                    time.sleep(1)
+
+                    content = driver.find_element(By.ID, 'dic_area').text
+                    summary = extractive_summarize_korean_text(content, compression_ratio=0.3)
+
                     row = {
                         'category': cat_dict[category],
                         'sub_category': sub_dict[sub],

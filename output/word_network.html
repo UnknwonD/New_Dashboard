@@ -88,8 +88,8 @@
                   
 
                   // parsing and collecting nodes and edges from the python
-                  nodes = new vis.DataSet([{"color": "#97c2fc", "id": "\uc815\uce58", "label": "\uc815\uce58", "shape": "dot", "size": 10}, {"color": "#97c2fc", "id": "\uc801", "label": "\uc801", "shape": "dot", "size": 10}, {"color": "#97c2fc", "id": "\ub17c\ub780", "label": "\ub17c\ub780", "shape": "dot", "size": 10}, {"color": "#97c2fc", "id": "\uc774", "label": "\uc774", "shape": "dot", "size": 10}, {"color": "#97c2fc", "id": "\uacc4\uc18d", "label": "\uacc4\uc18d", "shape": "dot", "size": 10}, {"color": "#97c2fc", "id": "\ub418", "label": "\ub418", "shape": "dot", "size": 10}, {"color": "#97c2fc", "id": "\uace0", "label": "\uace0", "shape": "dot", "size": 10}, {"color": "#97c2fc", "id": "\uc788", "label": "\uc788", "shape": "dot", "size": 10}, {"color": "#97c2fc", "id": "\uc2b5\ub2c8\ub2e4", "label": "\uc2b5\ub2c8\ub2e4", "shape": "dot", "size": 10}]);
-                  edges = new vis.DataSet([{"from": "\uc815\uce58", "to": "\uc801"}, {"from": "\uc801", "to": "\ub17c\ub780"}, {"from": "\ub17c\ub780", "to": "\uc774"}, {"from": "\uc774", "to": "\uacc4\uc18d"}, {"from": "\uacc4\uc18d", "to": "\ub418"}, {"from": "\ub418", "to": "\uace0"}, {"from": "\uace0", "to": "\uc788"}, {"from": "\uc788", "to": "\uc2b5\ub2c8\ub2e4"}]);
+                  nodes = new vis.DataSet([{"color": "lightblue", "font": {"color": "black"}, "id": "\uae30\uc220", "label": "\uae30\uc220", "physics": false, "shape": "dot", "size": 10}, {"color": "lightblue", "font": {"color": "black"}, "id": "\ubc1c\uc804", "label": "\ubc1c\uc804", "physics": false, "shape": "dot", "size": 10}, {"color": "lightblue", "font": {"color": "black"}, "id": "\ud601\uc2e0", "label": "\ud601\uc2e0", "physics": false, "shape": "dot", "size": 10}, {"color": "lightblue", "font": {"color": "black"}, "id": "\ub274\uc2a4", "label": "\ub274\uc2a4", "physics": false, "shape": "dot", "size": 10}]);
+                  edges = new vis.DataSet([{"color": "gray", "from": "\uae30\uc220", "physics": false, "to": "\ubc1c\uc804"}, {"color": "gray", "from": "\ubc1c\uc804", "physics": false, "to": "\ud601\uc2e0"}, {"color": "gray", "from": "\ud601\uc2e0", "physics": false, "to": "\ub274\uc2a4"}]);
 
                   nodeColors = {};
                   allNodes = nodes.get({ returnType: "Object" });
@@ -117,6 +117,19 @@
         "dragNodes": true,
         "hideEdgesOnDrag": false,
         "hideNodesOnDrag": false
+    },
+    "layout": {
+        "hierarchical": {
+            "blockShifting": true,
+            "edgeMinimization": true,
+            "enabled": true,
+            "levelSeparation": 150,
+            "parentCentralization": true,
+            "sortMethod": "hubsize",
+            "treeSpacing": 200
+        },
+        "improvedLayout": true,
+        "randomSeed": 0
     },
     "physics": {
         "enabled": true,
