@@ -10,6 +10,7 @@ from sqlalchemy import create_engine, Table, MetaData, select
 from webdriver_manager.chrome import ChromeDriverManager
 from summarizer import Summarizer
 from kiwipiepy import Kiwi
+from tqdm import tqdm
 # from api import db_url
 import os
 import sys
@@ -87,11 +88,38 @@ sub_dict = {
     '228': '과학 일반'
 }
 
-def extractive_summarize_korean_text(text, compression_ratio=0.5):
-    # BERT 기반 추출 요약 모델 생성
+def split_text(text, max_length=512):
+    sentences = text.split(". ")
+    current_length = 0
+    current_chunk = []
+    chunks = []
+
+    for sentence in sentences:
+        if current_length + len(sentence.split()) <= max_length:
+            current_chunk.append(sentence)
+            current_length += len(sentence.split())
+        else:
+            chunks.append(". ".join(current_chunk) + ".")
+            current_chunk = [sentence]
+            current_length = len(sentence.split())
+
+    if current_chunk:
+        chunks.append(". ".join(current_chunk) + ".")
+    
+    return chunks
+
+def extractive_summarize_korean_text(text, compression_ratio=0.3):
+    # 긴 텍스트 분할
+    chunks = split_text(text)
     model = Summarizer()
-    summary = model(text, ratio=compression_ratio)
+
+    # 각 청크에 대해 요약 수행 후 합치기
+    summarized_chunks = [model(chunk, ratio=compression_ratio) for chunk in chunks]
+    summary = " ".join(summarized_chunks)
+    
     return summary
+
+
 
 def str_to_date(phrase):
     result_time = datetime.now()
@@ -127,7 +155,7 @@ while True:
             driver.get(base_url)
             time.sleep(3)
 
-            for _ in range(100):
+            for _ in range(20):
                 try:
                     driver.find_element(By.CSS_SELECTOR, 'a.section_more_inner').click()
                 except:
@@ -140,7 +168,7 @@ while True:
 
             news_body = soup.select('div.section_article')
 
-            for news in news_body:
+            for news in tqdm(news_body):
                 contents = news.select('li.sa_item')
                 for content in contents:
                     title = content.select_one('a.sa_text_title > strong').text if content.select_one('a.sa_text_title > strong') else "-"
@@ -153,10 +181,7 @@ while True:
                     time.sleep(1)
 
                     content = driver.find_element(By.ID, 'dic_area').text
-                    summary = extractive_summarize_korean_text(content, compression_ratio=0.3)
-
                     sentence = kiwi.split_into_sents(content)
-                    summary = kiwi.split_into_sents(summary)
 
                     row = {
                         'category': cat_dict[category],
@@ -167,7 +192,6 @@ while True:
                         'date': str_to_date(date),
                         'sentences': str(sentence),
                         'url' : url,
-                        'summary' : summary
                     }
                     
                     news_data.append(row)
@@ -200,6 +224,3 @@ while True:
 data 수집된 개수 : {new_data}
     ''')
     cnt += 1
-
-    print('5시간 뒤에 다시 수집합니다...')
-    time.sleep(18000)
