@@ -9,6 +9,7 @@ from selenium.webdriver.chrome.service import Service
 from sqlalchemy import create_engine, Table, MetaData, select
 from webdriver_manager.chrome import ChromeDriverManager
 from summarizer import Summarizer
+from kiwipiepy import Kiwi
 # from api import db_url
 import os
 import sys
@@ -111,6 +112,7 @@ def str_to_date(phrase):
 df = pd.read_csv('news_data.csv', encoding='utf-8-sig')
 driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
 cnt = 0
+kiwi = Kiwi(num_workers=5)
 
 total_data = len(df)
 while True:
@@ -143,7 +145,7 @@ while True:
                 for content in contents:
                     title = content.select_one('a.sa_text_title > strong').text if content.select_one('a.sa_text_title > strong') else "-"
                     url = content.select_one('a.sa_text_title')['href'] if content.select_one('a.sa_text_title') else "-"
-                    detail = content.select_one('div.sa_text_lede').text if content.select_one('div.sa_text_lede') else "-"
+                    # detail = content.select_one('div.sa_text_lede').text if content.select_one('div.sa_text_lede') else "-"
                     publisher = content.select_one('div.sa_text_press').text if content.select_one('div.sa_text_press') else "-"
                     date = content.select_one('div.sa_text_datetime > b').text if content.select_one('div.sa_text_datetime > b') else "-"
 
@@ -153,14 +155,19 @@ while True:
                     content = driver.find_element(By.ID, 'dic_area').text
                     summary = extractive_summarize_korean_text(content, compression_ratio=0.3)
 
+                    sentence = kiwi.split_into_sents(content)
+                    summary = kiwi.split_into_sents(summary)
+
                     row = {
                         'category': cat_dict[category],
                         'sub_category': sub_dict[sub],
                         'title': title,
-                        'content': detail,
+                        'content': content,
                         'publisher': publisher,
                         'date': str_to_date(date),
+                        'sentences': str(sentence),
                         'url' : url,
+                        'summary' : summary
                     }
                     
                     news_data.append(row)
