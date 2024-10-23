@@ -88,6 +88,52 @@ sub_dict = {
     '228': '과학 일반'
 }
 
+replace_dict = {
+    '尹': '윤석열',
+    '文': '문재인',
+    '朴': '박근혜',
+    '李': '이명박',
+    '金': '김대중',
+    '盧': '노무현',
+    '全': '전두환',
+    '崔': '최규하',
+    '朴正熙': '박정희',
+    '日': '일본',
+    '美': '미국',
+    '中': '중국',
+    '韓': '한국',
+    '北': '북한',
+    '露': '러시아',
+    '英': '영국',
+    '獨': '독일',
+    '仏': '프랑스',
+    '豪': '호주',
+    '加': '캐나다',
+    '印': '인도',
+    '伊': '이탈리아',
+    '西': '스페인',
+    '瑞': '스위스',
+    '希': '그리스',
+    '越': '베트남',
+    '泰': '태국',
+    '菲': '필리핀',
+    '墨': '멕시코',
+    '智': '칠레',
+    '阿': '아르헨티나',
+    '埃': '이집트',
+    '土': '터키',
+    '蘇': '소련',
+    '芬': '핀란드',
+    '葡': '포르투갈',
+    '蘭': '네덜란드',
+    '洪': '헝가리'
+}
+
+def replace_hanja(text):
+    for hanja, korean in replace_dict.items():
+        text = text.replace(hanja, korean)
+    return text
+
 def split_text(text, max_length=512):
     sentences = text.split(". ")
     current_length = 0
@@ -155,7 +201,7 @@ while True:
             driver.get(base_url)
             time.sleep(3)
 
-            for _ in range(20):
+            for _ in range(100):
                 try:
                     driver.find_element(By.CSS_SELECTOR, 'a.section_more_inner').click()
                 except:
@@ -172,26 +218,23 @@ while True:
                 contents = news.select('li.sa_item')
                 for content in contents:
                     title = content.select_one('a.sa_text_title > strong').text if content.select_one('a.sa_text_title > strong') else "-"
+                    title = replace_hanja(title)
+
                     url = content.select_one('a.sa_text_title')['href'] if content.select_one('a.sa_text_title') else "-"
                     # detail = content.select_one('div.sa_text_lede').text if content.select_one('div.sa_text_lede') else "-"
                     publisher = content.select_one('div.sa_text_press').text if content.select_one('div.sa_text_press') else "-"
                     date = content.select_one('div.sa_text_datetime > b').text if content.select_one('div.sa_text_datetime > b') else "-"
-
-                    driver.get(url)
-                    time.sleep(1)
-
-                    content = driver.find_element(By.ID, 'dic_area').text
-                    sentence = kiwi.split_into_sents(content)
-
+                    
                     row = {
                         'category': cat_dict[category],
                         'sub_category': sub_dict[sub],
                         'title': title,
-                        'content': content,
+                        'content': '-',
                         'publisher': publisher,
                         'date': str_to_date(date),
-                        'sentences': str(sentence),
+                        'sentences': '-',
                         'url' : url,
+                        'summary' : '-'
                     }
                     
                     news_data.append(row)
@@ -224,3 +267,6 @@ while True:
 data 수집된 개수 : {new_data}
     ''')
     cnt += 1
+
+    print('3시간 뒤에 다시 수집합니다.')
+    time.sleep(18000)
