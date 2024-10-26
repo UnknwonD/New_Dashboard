@@ -60,6 +60,7 @@ replace_dict = {
     '洪': '헝가리'
 }
 
+
 def replace_hanja(text):
     for hanja, korean in replace_dict.items():
         text = text.replace(hanja, korean)
@@ -85,10 +86,10 @@ def split_text(text, max_length=512):
     
     return chunks
 
+model = Summarizer()
 def extractive_summarize_korean_text(text, compression_ratio=0.3):
     # 긴 텍스트 분할
     chunks = split_text(text)
-    model = Summarizer()
 
     # 각 청크에 대해 요약 수행 후 합치기
     summarized_chunks = [model(chunk, ratio=compression_ratio) for chunk in chunks]
@@ -103,6 +104,7 @@ chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("--disable-extensions")
 chrome_options.add_argument("--disable-gpu")
+chrome_options.add_argument("--enable-unsafe-swiftshader")
 chrome_options.add_argument("log-level=3")
 
 def data_load():
@@ -116,7 +118,7 @@ def extract_content(url):
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
     try:
         driver.get(url)
-        time.sleep(2)
+        time.sleep(0.5)
         content = driver.find_element(By.ID, 'dic_area').text
         driver.quit()
         return content

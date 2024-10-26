@@ -1,0 +1,168 @@
+<html>
+    <head>
+        <meta charset="utf-8">
+        
+            <script src="lib/bindings/utils.js"></script>
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/dist/vis-network.min.css" integrity="sha512-WgxfT5LWjfszlPHXRmBWHkV2eceiWTOBvrKCNbdgDYTHrT2AeLCGbF4sZlZw3UMN3WtL0tGUoIAKsu8mllg/XA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/vis-network.min.js" integrity="sha512-LnvoEWDFrqGHlHmDD2101OrLcbsfkrzoSpvtSQtxK3RMnRV0eOkhhBN2dXHKRrUU8p2DGRTk35n4O8nWSVe1mQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+            
+        
+<center>
+<h1></h1>
+</center>
+
+<!-- <link rel="stylesheet" href="../node_modules/vis/dist/vis.min.css" type="text/css" />
+<script type="text/javascript" src="../node_modules/vis/dist/vis.js"> </script>-->
+        <link
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/css/bootstrap.min.css"
+          rel="stylesheet"
+          integrity="sha384-eOJMYsd53ii+scO/bJGFsiCZc+5NDVN2yr8+0RDqr0Ql0h+rP48ckxlpbzKgwra6"
+          crossorigin="anonymous"
+        />
+        <script
+          src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/js/bootstrap.bundle.min.js"
+          integrity="sha384-JEW9xMcG8R+pH31jmWH6WWP0WintQrMb4s7ZOdauHnUtxwoG2vI5DkLtS3qm9Ekf"
+          crossorigin="anonymous"
+        ></script>
+
+
+        <center>
+          <h1></h1>
+        </center>
+        <style type="text/css">
+
+             #mynetwork {
+                 width: 100%;
+                 height: 600px;
+                 background-color: #ffffff;
+                 border: 1px solid lightgray;
+                 position: relative;
+                 float: left;
+             }
+
+             
+
+             
+
+             
+        </style>
+    </head>
+
+
+    <body>
+        <div class="card" style="width: 100%">
+            
+            
+            <div id="mynetwork" class="card-body"></div>
+        </div>
+
+        
+        
+
+        <script type="text/javascript">
+
+              // initialize global variables.
+              var edges;
+              var nodes;
+              var allNodes;
+              var allEdges;
+              var nodeColors;
+              var originalNodes;
+              var network;
+              var container;
+              var options, data;
+              var filter = {
+                  item : '',
+                  property : '',
+                  value : []
+              };
+
+              
+
+              
+
+              // This method is responsible for drawing the graph, returns the drawn network
+              function drawGraph() {
+                  var container = document.getElementById('mynetwork');
+
+                  
+
+                  // parsing and collecting nodes and edges from the python
+                  nodes = new vis.DataSet([{"color": "red", "font": {"color": "black"}, "id": "\uc9c4\ud589", "label": "\uc9c4\ud589", "physics": false, "shape": "dot", "size": 30}, {"color": "lightgreen", "font": {"color": "black"}, "id": "\uc628\ub77c\uc778", "label": "\uc628\ub77c\uc778", "physics": false, "shape": "dot", "size": 20}, {"color": "lightyellow", "font": {"color": "black"}, "id": "\uc7a5", "label": "\uc7a5", "physics": false, "shape": "dot", "size": 10}, {"color": "lightyellow", "font": {"color": "black"}, "id": "\ub300", "label": "\ub300", "physics": false, "shape": "dot", "size": 10}, {"color": "lightyellow", "font": {"color": "black"}, "id": "\uc774\ubc88", "label": "\uc774\ubc88", "physics": false, "shape": "dot", "size": 10}, {"color": "lightyellow", "font": {"color": "black"}, "id": "\uac8c\uc784", "label": "\uac8c\uc784", "physics": false, "shape": "dot", "size": 10}, {"color": "lightgreen", "font": {"color": "black"}, "id": "\uac1c\ucd5c", "label": "\uac1c\ucd5c", "physics": false, "shape": "dot", "size": 20}, {"color": "lightyellow", "font": {"color": "black"}, "id": "\uc2dc", "label": "\uc2dc", "physics": false, "shape": "dot", "size": 10}, {"color": "lightgreen", "font": {"color": "black"}, "id": "\uc624\ub2e4", "label": "\uc624\ub2e4", "physics": false, "shape": "dot", "size": 20}, {"color": "lightyellow", "font": {"color": "black"}, "id": "\ubbf8\ub514\uc5b4", "label": "\ubbf8\ub514\uc5b4", "physics": false, "shape": "dot", "size": 10}, {"color": "lightyellow", "font": {"color": "black"}, "id": "\uc6d4", "label": "\uc6d4", "physics": false, "shape": "dot", "size": 10}, {"color": "lightyellow", "font": {"color": "black"}, "id": "\ub300\ud45c", "label": "\ub300\ud45c", "physics": false, "shape": "dot", "size": 10}, {"color": "lightyellow", "font": {"color": "black"}, "id": "\uce74\uce74\uc624", "label": "\uce74\uce74\uc624", "physics": false, "shape": "dot", "size": 10}, {"color": "lightyellow", "font": {"color": "black"}, "id": "\ubaa8\ubc14\uc77c", "label": "\ubaa8\ubc14\uc77c", "physics": false, "shape": "dot", "size": 10}, {"color": "lightyellow", "font": {"color": "black"}, "id": "\ud6c4", "label": "\ud6c4", "physics": false, "shape": "dot", "size": 10}, {"color": "lightyellow", "font": {"color": "black"}, "id": "\ud558\ub2e4", "label": "\ud558\ub2e4", "physics": false, "shape": "dot", "size": 10}, {"color": "lightyellow", "font": {"color": "black"}, "id": "\ud300", "label": "\ud300", "physics": false, "shape": "dot", "size": 10}, {"color": "lightyellow", "font": {"color": "black"}, "id": "\ucd5c\uace0", "label": "\ucd5c\uace0", "physics": false, "shape": "dot", "size": 10}, {"color": "lightgreen", "font": {"color": "black"}, "id": "\uadf8\ub8f9", "label": "\uadf8\ub8f9", "physics": false, "shape": "dot", "size": 20}, {"color": "lightyellow", "font": {"color": "black"}, "id": "\ubc15", "label": "\ubc15", "physics": false, "shape": "dot", "size": 10}]);
+                  edges = new vis.DataSet([{"color": "gray", "from": "\uc9c4\ud589", "physics": false, "to": "\uc628\ub77c\uc778", "value": 0.9988878965377808}, {"color": "lightgray", "from": "\uc628\ub77c\uc778", "physics": false, "to": "\uc7a5", "value": 0.9989268183708191}, {"color": "lightgray", "from": "\uc628\ub77c\uc778", "physics": false, "to": "\ub300", "value": 0.998903751373291}, {"color": "lightgray", "from": "\uc628\ub77c\uc778", "physics": false, "to": "\uc774\ubc88", "value": 0.9989004135131836}, {"color": "lightgray", "from": "\uc628\ub77c\uc778", "physics": false, "to": "\uac8c\uc784", "value": 0.9988585710525513}, {"color": "gray", "from": "\uc9c4\ud589", "physics": false, "to": "\uac1c\ucd5c", "value": 0.998886227607727}, {"color": "lightgray", "from": "\uac1c\ucd5c", "physics": false, "to": "\uc628\ub77c\uc778", "value": 0.9986832141876221}, {"color": "lightgray", "from": "\uac1c\ucd5c", "physics": false, "to": "\uc7a5", "value": 0.9984515309333801}, {"color": "lightgray", "from": "\uac1c\ucd5c", "physics": false, "to": "\ub300", "value": 0.998322069644928}, {"color": "lightgray", "from": "\uac1c\ucd5c", "physics": false, "to": "\uc2dc", "value": 0.9982612133026123}, {"color": "gray", "from": "\uc9c4\ud589", "physics": false, "to": "\uc624\ub2e4", "value": 0.9988174438476562}, {"color": "lightgray", "from": "\uc624\ub2e4", "physics": false, "to": "\uc2dc", "value": 0.9988440275192261}, {"color": "lightgray", "from": "\uc624\ub2e4", "physics": false, "to": "\uc774\ubc88", "value": 0.9987742900848389}, {"color": "lightgray", "from": "\uc624\ub2e4", "physics": false, "to": "\uac8c\uc784", "value": 0.9986316561698914}, {"color": "lightgray", "from": "\uc624\ub2e4", "physics": false, "to": "\ubbf8\ub514\uc5b4", "value": 0.9985157251358032}, {"color": "gray", "from": "\uc9c4\ud589", "physics": false, "to": "\uc2dc", "value": 0.9987840056419373}, {"color": "lightgray", "from": "\uc2dc", "physics": false, "to": "\uc774\ubc88", "value": 0.999229907989502}, {"color": "lightgray", "from": "\uc2dc", "physics": false, "to": "\uac8c\uc784", "value": 0.9991111159324646}, {"color": "lightgray", "from": "\uc2dc", "physics": false, "to": "\uc6d4", "value": 0.9990856051445007}, {"color": "lightgray", "from": "\uc2dc", "physics": false, "to": "\ub300\ud45c", "value": 0.9989637136459351}, {"color": "lightgray", "from": "\uc2dc", "physics": false, "to": "\uce74\uce74\uc624", "value": 0.9988965392112732}, {"color": "gray", "from": "\uc9c4\ud589", "physics": false, "to": "\uc7a5", "value": 0.9987701177597046}, {"color": "lightgray", "from": "\uc7a5", "physics": false, "to": "\uc774\ubc88", "value": 0.9991103410720825}, {"color": "lightgray", "from": "\uc7a5", "physics": false, "to": "\uac8c\uc784", "value": 0.9990565180778503}, {"color": "lightgray", "from": "\uc7a5", "physics": false, "to": "\ub300", "value": 0.9989905953407288}, {"color": "lightgray", "from": "\uc7a5", "physics": false, "to": "\ubaa8\ubc14\uc77c", "value": 0.9989354014396667}, {"color": "gray", "from": "\uc9c4\ud589", "physics": false, "to": "\uc774\ubc88", "value": 0.9987117648124695}, {"color": "lightgray", "from": "\uc774\ubc88", "physics": false, "to": "\uac8c\uc784", "value": 0.9996496438980103}, {"color": "lightgray", "from": "\uc774\ubc88", "physics": false, "to": "\ub300\ud45c", "value": 0.9994992613792419}, {"color": "lightgray", "from": "\uc774\ubc88", "physics": false, "to": "\ud6c4", "value": 0.999420702457428}, {"color": "lightgray", "from": "\uc774\ubc88", "physics": false, "to": "\ud558\ub2e4", "value": 0.999417245388031}, {"color": "lightgray", "from": "\uc774\ubc88", "physics": false, "to": "\ub300", "value": 0.9994145035743713}, {"color": "gray", "from": "\uc9c4\ud589", "physics": false, "to": "\ub300", "value": 0.9986159801483154}, {"color": "lightgray", "from": "\ub300", "physics": false, "to": "\uac8c\uc784", "value": 0.9995549321174622}, {"color": "lightgray", "from": "\ub300", "physics": false, "to": "\ud300", "value": 0.9993315935134888}, {"color": "lightgray", "from": "\ub300", "physics": false, "to": "\ub300\ud45c", "value": 0.9993240237236023}, {"color": "lightgray", "from": "\ub300", "physics": false, "to": "\ucd5c\uace0", "value": 0.9992769360542297}, {"color": "gray", "from": "\uc9c4\ud589", "physics": false, "to": "\uac8c\uc784", "value": 0.9984690546989441}, {"color": "lightgray", "from": "\uac8c\uc784", "physics": false, "to": "\ub300\ud45c", "value": 0.9995917081832886}, {"color": "lightgray", "from": "\uac8c\uc784", "physics": false, "to": "\ud558\ub2e4", "value": 0.9995807409286499}, {"color": "lightgray", "from": "\uac8c\uc784", "physics": false, "to": "\ud6c4", "value": 0.9995487332344055}, {"color": "gray", "from": "\uc9c4\ud589", "physics": false, "to": "\uadf8\ub8f9", "value": 0.9984098076820374}, {"color": "lightgray", "from": "\uadf8\ub8f9", "physics": false, "to": "\uc7a5", "value": 0.9987303018569946}, {"color": "lightgray", "from": "\uadf8\ub8f9", "physics": false, "to": "\ubc15", "value": 0.998520016670227}, {"color": "lightgray", "from": "\uadf8\ub8f9", "physics": false, "to": "\uc628\ub77c\uc778", "value": 0.9981017708778381}, {"color": "lightgray", "from": "\uadf8\ub8f9", "physics": false, "to": "\uac1c\ucd5c", "value": 0.9980244636535645}, {"color": "gray", "from": "\uc9c4\ud589", "physics": false, "to": "\ucd5c\uace0", "value": 0.9983347058296204}, {"color": "lightgray", "from": "\ucd5c\uace0", "physics": false, "to": "\uac8c\uc784", "value": 0.9989907741546631}, {"color": "lightgray", "from": "\ucd5c\uace0", "physics": false, "to": "\uc774\ubc88", "value": 0.9989117980003357}, {"color": "lightgray", "from": "\ucd5c\uace0", "physics": false, "to": "\uc628\ub77c\uc778", "value": 0.9987892508506775}, {"color": "lightgray", "from": "\ucd5c\uace0", "physics": false, "to": "\ud300", "value": 0.9987884759902954}]);
+
+                  nodeColors = {};
+                  allNodes = nodes.get({ returnType: "Object" });
+                  for (nodeId in allNodes) {
+                    nodeColors[nodeId] = allNodes[nodeId].color;
+                  }
+                  allEdges = edges.get({ returnType: "Object" });
+                  // adding nodes and edges to the graph
+                  data = {nodes: nodes, edges: edges};
+
+                  var options = {
+    "configure": {
+        "enabled": false
+    },
+    "edges": {
+        "color": {
+            "inherit": true
+        },
+        "smooth": {
+            "enabled": true,
+            "type": "dynamic"
+        }
+    },
+    "interaction": {
+        "dragNodes": true,
+        "hideEdgesOnDrag": false,
+        "hideNodesOnDrag": false
+    },
+    "layout": {
+        "hierarchical": {
+            "blockShifting": true,
+            "edgeMinimization": true,
+            "enabled": true,
+            "levelSeparation": 150,
+            "parentCentralization": true,
+            "sortMethod": "hubsize",
+            "treeSpacing": 200
+        },
+        "improvedLayout": true,
+        "randomSeed": 0
+    },
+    "physics": {
+        "enabled": true,
+        "stabilization": {
+            "enabled": true,
+            "fit": true,
+            "iterations": 1000,
+            "onlyDynamicEdges": false,
+            "updateInterval": 50
+        }
+    }
+};
+
+                  
+
+
+                  
+
+                  network = new vis.Network(container, data, options);
+
+                  
+
+                  
+
+                  
+
+
+                  
+
+                  return network;
+
+              }
+              drawGraph();
+        </script>
+    </body>
+</html>
