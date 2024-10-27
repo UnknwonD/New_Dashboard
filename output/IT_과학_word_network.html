@@ -2,10 +2,204 @@
     <head>
         <meta charset="utf-8">
         
-            <script src="lib/bindings/utils.js"></script>
+            <script>function neighbourhoodHighlight(params) {
+  // console.log("in nieghbourhoodhighlight");
+  allNodes = nodes.get({ returnType: "Object" });
+  // originalNodes = JSON.parse(JSON.stringify(allNodes));
+  // if something is selected:
+  if (params.nodes.length > 0) {
+    highlightActive = true;
+    var i, j;
+    var selectedNode = params.nodes[0];
+    var degrees = 2;
+
+    // mark all nodes as hard to read.
+    for (let nodeId in allNodes) {
+      // nodeColors[nodeId] = allNodes[nodeId].color;
+      allNodes[nodeId].color = "rgba(200,200,200,0.5)";
+      if (allNodes[nodeId].hiddenLabel === undefined) {
+        allNodes[nodeId].hiddenLabel = allNodes[nodeId].label;
+        allNodes[nodeId].label = undefined;
+      }
+    }
+    var connectedNodes = network.getConnectedNodes(selectedNode);
+    var allConnectedNodes = [];
+
+    // get the second degree nodes
+    for (i = 1; i < degrees; i++) {
+      for (j = 0; j < connectedNodes.length; j++) {
+        allConnectedNodes = allConnectedNodes.concat(
+          network.getConnectedNodes(connectedNodes[j])
+        );
+      }
+    }
+
+    // all second degree nodes get a different color and their label back
+    for (i = 0; i < allConnectedNodes.length; i++) {
+      // allNodes[allConnectedNodes[i]].color = "pink";
+      allNodes[allConnectedNodes[i]].color = "rgba(150,150,150,0.75)";
+      if (allNodes[allConnectedNodes[i]].hiddenLabel !== undefined) {
+        allNodes[allConnectedNodes[i]].label =
+          allNodes[allConnectedNodes[i]].hiddenLabel;
+        allNodes[allConnectedNodes[i]].hiddenLabel = undefined;
+      }
+    }
+
+    // all first degree nodes get their own color and their label back
+    for (i = 0; i < connectedNodes.length; i++) {
+      // allNodes[connectedNodes[i]].color = undefined;
+      allNodes[connectedNodes[i]].color = nodeColors[connectedNodes[i]];
+      if (allNodes[connectedNodes[i]].hiddenLabel !== undefined) {
+        allNodes[connectedNodes[i]].label =
+          allNodes[connectedNodes[i]].hiddenLabel;
+        allNodes[connectedNodes[i]].hiddenLabel = undefined;
+      }
+    }
+
+    // the main node gets its own color and its label back.
+    // allNodes[selectedNode].color = undefined;
+    allNodes[selectedNode].color = nodeColors[selectedNode];
+    if (allNodes[selectedNode].hiddenLabel !== undefined) {
+      allNodes[selectedNode].label = allNodes[selectedNode].hiddenLabel;
+      allNodes[selectedNode].hiddenLabel = undefined;
+    }
+  } else if (highlightActive === true) {
+    // console.log("highlightActive was true");
+    // reset all nodes
+    for (let nodeId in allNodes) {
+      // allNodes[nodeId].color = "purple";
+      allNodes[nodeId].color = nodeColors[nodeId];
+      // delete allNodes[nodeId].color;
+      if (allNodes[nodeId].hiddenLabel !== undefined) {
+        allNodes[nodeId].label = allNodes[nodeId].hiddenLabel;
+        allNodes[nodeId].hiddenLabel = undefined;
+      }
+    }
+    highlightActive = false;
+  }
+
+  // transform the object into an array
+  var updateArray = [];
+  if (params.nodes.length > 0) {
+    for (let nodeId in allNodes) {
+      if (allNodes.hasOwnProperty(nodeId)) {
+        // console.log(allNodes[nodeId]);
+        updateArray.push(allNodes[nodeId]);
+      }
+    }
+    nodes.update(updateArray);
+  } else {
+    // console.log("Nothing was selected");
+    for (let nodeId in allNodes) {
+      if (allNodes.hasOwnProperty(nodeId)) {
+        // console.log(allNodes[nodeId]);
+        // allNodes[nodeId].color = {};
+        updateArray.push(allNodes[nodeId]);
+      }
+    }
+    nodes.update(updateArray);
+  }
+}
+
+function filterHighlight(params) {
+  allNodes = nodes.get({ returnType: "Object" });
+  // if something is selected:
+  if (params.nodes.length > 0) {
+    filterActive = true;
+    let selectedNodes = params.nodes;
+
+    // hiding all nodes and saving the label
+    for (let nodeId in allNodes) {
+      allNodes[nodeId].hidden = true;
+      if (allNodes[nodeId].savedLabel === undefined) {
+        allNodes[nodeId].savedLabel = allNodes[nodeId].label;
+        allNodes[nodeId].label = undefined;
+      }
+    }
+
+    for (let i=0; i < selectedNodes.length; i++) {
+      allNodes[selectedNodes[i]].hidden = false;
+      if (allNodes[selectedNodes[i]].savedLabel !== undefined) {
+        allNodes[selectedNodes[i]].label = allNodes[selectedNodes[i]].savedLabel;
+        allNodes[selectedNodes[i]].savedLabel = undefined;
+      }
+    }
+
+  } else if (filterActive === true) {
+    // reset all nodes
+    for (let nodeId in allNodes) {
+      allNodes[nodeId].hidden = false;
+      if (allNodes[nodeId].savedLabel !== undefined) {
+        allNodes[nodeId].label = allNodes[nodeId].savedLabel;
+        allNodes[nodeId].savedLabel = undefined;
+      }
+    }
+    filterActive = false;
+  }
+
+  // transform the object into an array
+  var updateArray = [];
+  if (params.nodes.length > 0) {
+    for (let nodeId in allNodes) {
+      if (allNodes.hasOwnProperty(nodeId)) {
+        updateArray.push(allNodes[nodeId]);
+      }
+    }
+    nodes.update(updateArray);
+  } else {
+    for (let nodeId in allNodes) {
+      if (allNodes.hasOwnProperty(nodeId)) {
+        updateArray.push(allNodes[nodeId]);
+      }
+    }
+    nodes.update(updateArray);
+  }
+}
+
+function selectNode(nodes) {
+  network.selectNodes(nodes);
+  neighbourhoodHighlight({ nodes: nodes });
+  return nodes;
+}
+
+function selectNodes(nodes) {
+  network.selectNodes(nodes);
+  filterHighlight({nodes: nodes});
+  return nodes;
+}
+
+function highlightFilter(filter) {
+  let selectedNodes = []
+  let selectedProp = filter['property']
+  if (filter['item'] === 'node') {
+    let allNodes = nodes.get({ returnType: "Object" });
+    for (let nodeId in allNodes) {
+      if (allNodes[nodeId][selectedProp] && filter['value'].includes((allNodes[nodeId][selectedProp]).toString())) {
+        selectedNodes.push(nodeId)
+      }
+    }
+  }
+  else if (filter['item'] === 'edge'){
+    let allEdges = edges.get({returnType: 'object'});
+    // check if the selected property exists for selected edge and select the nodes connected to the edge
+    for (let edge in allEdges) {
+      if (allEdges[edge][selectedProp] && filter['value'].includes((allEdges[edge][selectedProp]).toString())) {
+        selectedNodes.push(allEdges[edge]['from'])
+        selectedNodes.push(allEdges[edge]['to'])
+      }
+    }
+  }
+  selectNodes(selectedNodes)
+}</script>
             <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/dist/vis-network.min.css" integrity="sha512-WgxfT5LWjfszlPHXRmBWHkV2eceiWTOBvrKCNbdgDYTHrT2AeLCGbF4sZlZw3UMN3WtL0tGUoIAKsu8mllg/XA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
             <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/vis-network.min.js" integrity="sha512-LnvoEWDFrqGHlHmDD2101OrLcbsfkrzoSpvtSQtxK3RMnRV0eOkhhBN2dXHKRrUU8p2DGRTk35n4O8nWSVe1mQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
             
+            
+            
+            
+            
+            
+
         
 <center>
 <h1></h1>
@@ -33,7 +227,7 @@
 
              #mynetwork {
                  width: 100%;
-                 height: 600px;
+                 height: 60rem;
                  background-color: #ffffff;
                  border: 1px solid lightgray;
                  position: relative;
@@ -88,8 +282,8 @@
                   
 
                   // parsing and collecting nodes and edges from the python
-                  nodes = new vis.DataSet([{"color": "red", "font": {"color": "black"}, "id": "IT_\uacfc\ud559", "label": "IT_\uacfc\ud559", "physics": false, "shape": "dot", "size": 30}, {"color": "lightblue", "font": {"color": "black"}, "id": "\ub9e4\uce58", "label": "\ub9e4\uce58", "physics": false, "shape": "dot", "size": 20}, {"color": "lightblue", "font": {"color": "black"}, "id": "\uc120\uc218", "label": "\uc120\uc218", "physics": false, "shape": "dot", "size": 20}, {"color": "lightblue", "font": {"color": "black"}, "id": "\ucd95\uad6c", "label": "\ucd95\uad6c", "physics": false, "shape": "dot", "size": 20}, {"color": "lightblue", "font": {"color": "black"}, "id": "\ub125\uc2a8", "label": "\ub125\uc2a8", "physics": false, "shape": "dot", "size": 20}, {"color": "lightblue", "font": {"color": "black"}, "id": "\uc11c\uc6b8", "label": "\uc11c\uc6b8", "physics": false, "shape": "dot", "size": 20}, {"color": "lightblue", "font": {"color": "black"}, "id": "\uacbd\uae30", "label": "\uacbd\uae30", "physics": false, "shape": "dot", "size": 20}, {"color": "lightblue", "font": {"color": "black"}, "id": "\uc544\uc774\ucf58", "label": "\uc544\uc774\ucf58", "physics": false, "shape": "dot", "size": 20}, {"color": "lightblue", "font": {"color": "black"}, "id": "\uae30\uc790", "label": "\uae30\uc790", "physics": false, "shape": "dot", "size": 20}, {"color": "lightblue", "font": {"color": "black"}, "id": "\uac8c\uc784", "label": "\uac8c\uc784", "physics": false, "shape": "dot", "size": 20}, {"color": "lightblue", "font": {"color": "black"}, "id": "\uc9c4\ud589", "label": "\uc9c4\ud589", "physics": false, "shape": "dot", "size": 20}]);
-                  edges = new vis.DataSet([{"color": "gray", "from": "IT_\uacfc\ud559", "physics": false, "to": "\ub9e4\uce58"}, {"color": "gray", "from": "IT_\uacfc\ud559", "physics": false, "to": "\uc120\uc218"}, {"color": "gray", "from": "IT_\uacfc\ud559", "physics": false, "to": "\ucd95\uad6c"}, {"color": "gray", "from": "IT_\uacfc\ud559", "physics": false, "to": "\ub125\uc2a8"}, {"color": "gray", "from": "IT_\uacfc\ud559", "physics": false, "to": "\uc11c\uc6b8"}, {"color": "gray", "from": "IT_\uacfc\ud559", "physics": false, "to": "\uacbd\uae30"}, {"color": "gray", "from": "IT_\uacfc\ud559", "physics": false, "to": "\uc544\uc774\ucf58"}, {"color": "gray", "from": "IT_\uacfc\ud559", "physics": false, "to": "\uae30\uc790"}, {"color": "gray", "from": "IT_\uacfc\ud559", "physics": false, "to": "\uac8c\uc784"}, {"color": "gray", "from": "IT_\uacfc\ud559", "physics": false, "to": "\uc9c4\ud589"}]);
+                  nodes = new vis.DataSet([{"color": "red", "font": {"color": "black"}, "id": "IT_\uacfc\ud559", "label": "IT_\uacfc\ud559", "shape": "dot", "size": 30}, {"color": "lightblue", "font": {"color": "black"}, "id": "\ub9e4\uce58", "label": "\ub9e4\uce58", "shape": "circle", "size": 20}, {"color": "lightgreen", "font": {"color": "black"}, "id": "\uc5f4\ub9ac\ub2e4", "label": "\uc5f4\ub9ac\ub2e4", "shape": "circle", "size": 15}, {"color": "lightgreen", "font": {"color": "black"}, "id": "\ub125\uc2a8", "label": "\ub125\uc2a8", "shape": "circle", "size": 15}, {"color": "lightgreen", "font": {"color": "black"}, "id": "\uc774\ubca4\ud2b8", "label": "\uc774\ubca4\ud2b8", "shape": "circle", "size": 15}, {"color": "lightblue", "font": {"color": "black"}, "id": "\uc120\uc218", "label": "\uc120\uc218", "shape": "circle", "size": 20}, {"color": "lightgreen", "font": {"color": "black"}, "id": "\ud55c\uad6d", "label": "\ud55c\uad6d", "shape": "circle", "size": 15}, {"color": "lightgreen", "font": {"color": "black"}, "id": "\ub300\uacb0", "label": "\ub300\uacb0", "shape": "circle", "size": 15}, {"color": "lightgreen", "font": {"color": "black"}, "id": "\uc628\ub77c\uc778", "label": "\uc628\ub77c\uc778", "shape": "circle", "size": 15}, {"color": "lightblue", "font": {"color": "black"}, "id": "\ucd95\uad6c", "label": "\ucd95\uad6c", "shape": "circle", "size": 20}, {"color": "lightgreen", "font": {"color": "black"}, "id": "\uacbd\uae30", "label": "\uacbd\uae30", "shape": "circle", "size": 15}, {"color": "lightgreen", "font": {"color": "black"}, "id": "\uc138\uacc4", "label": "\uc138\uacc4", "shape": "circle", "size": 15}, {"color": "lightgreen", "font": {"color": "black"}, "id": "\ud3bc\uce58\ub2e4", "label": "\ud3bc\uce58\ub2e4", "shape": "circle", "size": 15}, {"color": "lightblue", "font": {"color": "black"}, "id": "\uc11c\uc6b8", "label": "\uc11c\uc6b8", "shape": "circle", "size": 20}, {"color": "lightgreen", "font": {"color": "black"}, "id": "\ub274\uc2a4", "label": "\ub274\uc2a4", "shape": "circle", "size": 15}, {"color": "lightgreen", "font": {"color": "black"}, "id": "\uae30\uc790", "label": "\uae30\uc790", "shape": "circle", "size": 15}, {"color": "lightgreen", "font": {"color": "black"}, "id": "\uc624\ud6c4", "label": "\uc624\ud6c4", "shape": "circle", "size": 15}, {"color": "lightblue", "font": {"color": "black"}, "id": "\uc544\uc774\ucf58", "label": "\uc544\uc774\ucf58", "shape": "circle", "size": 20}, {"color": "lightgreen", "font": {"color": "black"}, "id": "\uc77c", "label": "\uc77c", "shape": "circle", "size": 15}, {"color": "lightgreen", "font": {"color": "black"}, "id": "\ud589\uc0ac", "label": "\ud589\uc0ac", "shape": "circle", "size": 15}, {"color": "lightgreen", "font": {"color": "black"}, "id": "\uc9c4\ud589", "label": "\uc9c4\ud589", "shape": "circle", "size": 15}, {"color": "lightblue", "font": {"color": "black"}, "id": "\uac8c\uc784", "label": "\uac8c\uc784", "shape": "circle", "size": 20}, {"color": "lightgreen", "font": {"color": "black"}, "id": "\uc774\ubc88", "label": "\uc774\ubc88", "shape": "circle", "size": 15}, {"color": "lightgreen", "font": {"color": "black"}, "id": "\ub300\ud45c", "label": "\ub300\ud45c", "shape": "circle", "size": 15}, {"color": "lightgreen", "font": {"color": "black"}, "id": "\ub300", "label": "\ub300", "shape": "circle", "size": 15}, {"color": "lightgreen", "font": {"color": "black"}, "id": "\uac1c\ucd5c", "label": "\uac1c\ucd5c", "shape": "circle", "size": 15}, {"color": "lightgreen", "font": {"color": "black"}, "id": "\uc624\ub2e4", "label": "\uc624\ub2e4", "shape": "circle", "size": 15}]);
+                  edges = new vis.DataSet([{"color": "gray", "from": "IT_\uacfc\ud559", "to": "\ub9e4\uce58"}, {"color": "lightgray", "from": "\ub9e4\uce58", "to": "\uc5f4\ub9ac\ub2e4"}, {"color": "lightgray", "from": "\ub9e4\uce58", "to": "\ub125\uc2a8"}, {"color": "lightgray", "from": "\ub9e4\uce58", "to": "\uc774\ubca4\ud2b8"}, {"color": "gray", "from": "IT_\uacfc\ud559", "to": "\uc120\uc218"}, {"color": "lightgray", "from": "\uc120\uc218", "to": "\ud55c\uad6d"}, {"color": "lightgray", "from": "\uc120\uc218", "to": "\ub300\uacb0"}, {"color": "lightgray", "from": "\uc120\uc218", "to": "\uc628\ub77c\uc778"}, {"color": "gray", "from": "IT_\uacfc\ud559", "to": "\ucd95\uad6c"}, {"color": "lightgray", "from": "\ucd95\uad6c", "to": "\uacbd\uae30"}, {"color": "lightgray", "from": "\ucd95\uad6c", "to": "\uc138\uacc4"}, {"color": "lightgray", "from": "\ucd95\uad6c", "to": "\ud3bc\uce58\ub2e4"}, {"color": "gray", "from": "IT_\uacfc\ud559", "to": "\ub125\uc2a8"}, {"color": "lightgray", "from": "\ub125\uc2a8", "to": "\uc5f4\ub9ac\ub2e4"}, {"color": "lightgray", "from": "\ub125\uc2a8", "to": "\uc774\ubca4\ud2b8"}, {"color": "gray", "from": "IT_\uacfc\ud559", "to": "\uc11c\uc6b8"}, {"color": "lightgray", "from": "\uc11c\uc6b8", "to": "\ub274\uc2a4"}, {"color": "lightgray", "from": "\uc11c\uc6b8", "to": "\uae30\uc790"}, {"color": "lightgray", "from": "\uc11c\uc6b8", "to": "\uc624\ud6c4"}, {"color": "gray", "from": "IT_\uacfc\ud559", "to": "\uacbd\uae30"}, {"color": "lightgray", "from": "\uacbd\uae30", "to": "\uc138\uacc4"}, {"color": "lightgray", "from": "\uacbd\uae30", "to": "\ud3bc\uce58\ub2e4"}, {"color": "gray", "from": "IT_\uacfc\ud559", "to": "\uc544\uc774\ucf58"}, {"color": "lightgray", "from": "\uc544\uc774\ucf58", "to": "\uc5f4\ub9ac\ub2e4"}, {"color": "lightgray", "from": "\uc544\uc774\ucf58", "to": "\ub9e4\uce58"}, {"color": "lightgray", "from": "\uc544\uc774\ucf58", "to": "\ub125\uc2a8"}, {"color": "gray", "from": "IT_\uacfc\ud559", "to": "\uae30\uc790"}, {"color": "lightgray", "from": "\uae30\uc790", "to": "\uc77c"}, {"color": "lightgray", "from": "\uae30\uc790", "to": "\ud589\uc0ac"}, {"color": "lightgray", "from": "\uae30\uc790", "to": "\uc9c4\ud589"}, {"color": "gray", "from": "IT_\uacfc\ud559", "to": "\uac8c\uc784"}, {"color": "lightgray", "from": "\uac8c\uc784", "to": "\uc774\ubc88"}, {"color": "lightgray", "from": "\uac8c\uc784", "to": "\ub300\ud45c"}, {"color": "lightgray", "from": "\uac8c\uc784", "to": "\ub300"}, {"color": "gray", "from": "IT_\uacfc\ud559", "to": "\uc9c4\ud589"}, {"color": "lightgray", "from": "\uc9c4\ud589", "to": "\uc628\ub77c\uc778"}, {"color": "lightgray", "from": "\uc9c4\ud589", "to": "\uac1c\ucd5c"}, {"color": "lightgray", "from": "\uc9c4\ud589", "to": "\uc624\ub2e4"}]);
 
                   nodeColors = {};
                   allNodes = nodes.get({ returnType: "Object" });
@@ -150,6 +344,8 @@
 
                   network = new vis.Network(container, data, options);
 
+                  
+                    network.on("click", neighbourhoodHighlight);
                   
 
                   

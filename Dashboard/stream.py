@@ -14,14 +14,63 @@ from sqlalchemy import create_engine
 from api import db_url
 from gensim.models import Word2Vec
 
+from transformers import BertTokenizerFast, BertForSequenceClassification
+import torch
+
+stopwords = ['대하', '때문', '경우', '그리고', '그러나', '하지만', '또한', '또는', '따라서', '그래서', '하지만', '이', '그', '저', '것', '수', '등', '및', '을', '를', '은', '는', '이', '가', '에', '와', '과', '에서', '이다', '있다', '없다', '되다', '하다', '않다', '같다', '때문에', '위해', '대한', '여러', '모든', '어떤', '하면', '그러면']
+
+# 토크나이저와 모델 로드
+tokenizer = BertTokenizerFast.from_pretrained("sangrimlee/bert-base-multilingual-cased-nsmc")
+model = BertForSequenceClassification.from_pretrained("sangrimlee/bert-base-multilingual-cased-nsmc")
+
+# 디바이스 설정 (GPU 사용 가능 시)
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+model.to(device)  # 모델을 GPU로 이동
+
+@st.cache_data
+def analyze_sentiment(text):
+    # 입력 텍스트 토크나이징
+    inputs = tokenizer(text, return_tensors='pt', truncation=True, padding=True)
+    inputs = {key: value.to(device) for key, value in inputs.items()}  # 입력 데이터를 GPU로 이동
+
+    # 모델 예측 수행 (그라디언트 계산 비활성화)
+    with torch.no_grad():
+        outputs = model(**inputs)
+    logits = outputs.logits
+
+    # 감정 분류 결과 도출
+    predicted_class = torch.argmax(logits, dim=1).item()
+    if predicted_class == 0:
+        return '부정'
+    else:
+        return '긍정'
+
+# # Sentiment analysis function
+# def analyze_sentiment(text):
+#     analysis = TextBlob(text)
+#     if analysis.sentiment.polarity > 0:
+#         return '긍정'
+#     elif analysis.sentiment.polarity == 0:
+#         return '중립'
+#     else:
+#         return '부정'
+
 @st.cache_data
 def create_wordcloud(text):
     # Use font_path to correctly display Korean text, words are horizontal only
-    wordcloud = WordCloud(width=600, height=600, background_color='white', font_path='malgun.ttf', prefer_horizontal=1.0).generate(text)
+    wordcloud = WordCloud(width=1500, height=1200, background_color='white', font_path='malgun.ttf', prefer_horizontal=1.0).generate(text)
     fig, ax = plt.subplots()
     ax.imshow(wordcloud, interpolation='bilinear')
     ax.axis('off')
     return fig
+
+
+def find_similar_words(word, model, topn=3):
+    try:
+        similar_words = model.wv.most_similar(word, topn=topn)
+        return [w[0] for w in similar_words]
+    except KeyError:
+        return []
 
 @st.cache_data
 def train_word2vec_model(sentences):
@@ -30,15 +79,28 @@ def train_word2vec_model(sentences):
     return model
 
 def visualize_main_word_network(category, top_keywords, w2v_model):
-    net = Network(notebook=False, height='600px', width='100%', bgcolor='#ffffff', font_color='black', layout=True)
+    net = Network(notebook=False, 
+                height='60rem', 
+                width='100%', 
+                bgcolor='#ffffff', 
+                font_color='black',
+                cdn_resources="remote",
+                layout=True,
+                neighborhood_highlight=True)
     
     # Add main node for the category
-    net.add_node(category, label=category, size=30, color='red', physics=False)
+    net.add_node(category, label=category, size=30, color='red')
     
     # Add nodes for top keywords and connect them to the category node
     for keyword in top_keywords:
-        net.add_node(keyword, label=keyword, size=20, color='lightblue', physics=False)
-        net.add_edge(category, keyword, color='gray', physics=False)
+        net.add_node(keyword, label=keyword, size=20, color='lightblue', shape='circle')
+        net.add_edge(category, keyword, color='gray')
+        
+        # Find related words for each keyword
+        similar_words = find_similar_words(keyword, w2v_model, topn=3)
+        for similar_word in similar_words:
+            net.add_node(similar_word, label=similar_word, size=15, color='lightgreen', shape='circle')
+            net.add_edge(keyword, similar_word, color='lightgray')
     
     # Ensure the output directory exists
     output_dir = "output"
@@ -49,6 +111,7 @@ def visualize_main_word_network(category, top_keywords, w2v_model):
     net.write_html(output_path)
     with open(output_path, 'r', encoding='utf-8') as HtmlFile:
         return HtmlFile.read()
+
 
 def visualize_expanded_word_network(main_word, w2v_model):
     net = Network(notebook=False, height='600px', width='100%', bgcolor='#ffffff', font_color='black', layout=True)
@@ -110,98 +173,75 @@ def data_load(target_date):
     
     return df
 
-# Sentiment analysis function
-def analyze_sentiment(text):
-    analysis = TextBlob(text)
-    if analysis.sentiment.polarity > 0:
-        return '긍정'
-    elif analysis.sentiment.polarity == 0:
-        return '중립'
-    else:
-        return '부정'
-
 def main():
+    # 페이지 기본 설정
     st.set_page_config(layout='wide', page_title='데일리 뉴스 리포트 대시보드', page_icon='📊')
-    st.title('데일리 뉴스 리포트 대시보드')
 
-    # 날짜 선택 창
+    # 사이드바 및 페이지 제목
+    st.sidebar.title('데일리 뉴스 리포트')
     st.sidebar.subheader("데이터 선택")
     selected_date = st.sidebar.date_input('날짜 선택', pd.Timestamp('today'))
-
+    
+    # 데이터 불러오기
     if selected_date:
         df = data_load(selected_date)
-        
         if df.empty:
             st.warning("선택한 날짜에 해당하는 데이터가 없습니다.")
         else:
-            # 메인 화면에 데일리 리포트 표시
-            st.header(f"{selected_date.strftime('%Y년 %m월 %d일')} 데일리 뉴스 리포트")
-
-            # 탭을 이용한 메인 및 카테고리 선택
+            st.title(f"📍 {selected_date.strftime('%Y년 %m월 %d일')} 데일리 뉴스 리포트")
+            # 탭 구조로 뉴스 세부 정보 표시 (탭을 상단에 배치)
             tab_labels = ['메인', '정치', '경제', '사회', '생활/문화', 'IT/과학']
             tabs = st.tabs(tab_labels)
 
-            # 메인 탭
+            # 메인 화면 레이아웃 - 컬럼 사용으로 가독성 개선
             with tabs[0]:
-                st.header('전체 뉴스 요약 정보')
-                # 주요 뉴스
-                st.subheader('주요 뉴스')
-                for i, row in df.iterrows():
-                    st.markdown(f"{i+1}. [{row['title']}]({row['url']}) / {row['category']} 뉴스")
-                
-                # 분야별 금일 뉴스 개수 정리
-                st.subheader('분야별 뉴스 개수')
-                news_count_by_category = df['category'].value_counts()
-                news_count_df = pd.DataFrame({'Category': news_count_by_category.index, 'Count': news_count_by_category.values})
-                category_chart = alt.Chart(news_count_df).mark_bar(color='steelblue').encode(
-                    x=alt.X('Category', sort='-y', axis=alt.Axis(labelAngle=-45)),
-                    y='Count'
-                )
-                try:
-                    st.altair_chart(category_chart, use_container_width=True)
-                except ValueError as e:
-                    st.error(f"차트 생성 중 오류가 발생했습니다: {e}")
-                
-                # 분야별 성향 비율 시각화
-                st.subheader('분야별 성향 분석')
-                df['sentiment'] = df['content'].apply(lambda x: analyze_sentiment(' '.join(x)))
-                sentiment_by_category = df.groupby('category')['sentiment'].value_counts().unstack().fillna(0)
-                
-                # 각 카테고리에 대해 파이차트 그리기
-                for category in sentiment_by_category.index:
-                    st.markdown(f"**{category}** 뉴스 성향 분석")
-                    category_sentiments = sentiment_by_category.loc[category]
-                    sentiment_df = pd.DataFrame({'Sentiment': category_sentiments.index, 'Count': category_sentiments.values})
-                    pie_chart = alt.Chart(sentiment_df).mark_arc(innerRadius=50).encode(
-                        theta=alt.Theta('Count', stack=True),
-                        color=alt.Color('Sentiment', scale=alt.Scale(scheme='category10')),
-                        tooltip=['Sentiment', 'Count']
-                    ).properties(width=300, height=300)
-                    try:
-                        st.altair_chart(pie_chart, use_container_width=True)
-                    except ValueError as e:
-                        st.error(f"파이차트 생성 중 오류가 발생했습니다: {e}")
+                main_container = st.container()
+                with main_container:
+                    st.markdown("---")
+                    summary_col, chart_col = st.columns([2, 1], gap="medium")
 
-            # 카테고리별 탭
+                    # 주요 뉴스 요약 정보 (분야별로 5개씩만 보이도록 수정)
+                    with summary_col:
+                        st.subheader('📰 주요 뉴스')
+                        categories = df['category'].unique()
+                        for category in categories:
+                            st.markdown(f"### 🌐 {category} 뉴스")
+                            category_news = df[df['category'] == category].head(5)
+                            for i, row in category_news.iterrows():
+                                st.markdown(f"<div style='margin-bottom: 10px;'><strong>{i + 1}. <a href='{row['url']}' target='_blank'>{row['title']}</a></strong> 🌐 {row['publisher']}</div>", unsafe_allow_html=True)
+
+                    # 분야별 뉴스 개수 시각화
+                    with chart_col:
+                        st.subheader('📊 분야별 뉴스 개수')
+                        news_count_by_category = df['category'].value_counts()
+                        news_count_df = pd.DataFrame({'Category': news_count_by_category.index, 'Count': news_count_by_category.values})
+                        category_chart = alt.Chart(news_count_df).mark_bar(color='steelblue').encode(
+                            x=alt.X('Count', sort='-y'),
+                            y=alt.Y('Category', sort='-x', axis=alt.Axis(labelFontSize=12)),
+                            tooltip=['Category', 'Count']
+                        ).properties(height=300)
+                        st.altair_chart(category_chart, use_container_width=True)
+
+            # 카테고리별 탭 구성
             for idx, selected_category in enumerate(tab_labels[1:]):
                 with tabs[idx + 1]:
-                    # 선택한 날짜 및 카테고리 필터링
                     filtered_data = df[df['category'] == selected_category]
                     if filtered_data.empty:
                         st.warning('해당 카테고리에 대한 데이터가 없습니다.')
                         continue
 
-                    # Train Word2Vec model
+                    st.subheader(f"📝 {selected_category} 뉴스 분석")
                     sentences = [sentence for sublist in filtered_data['sentences'] for sentence in sublist]
                     w2v_model = train_word2vec_model(sentences)
 
-                    # 컨테이너 사용하여 시각화
+                    # 카테고리 상세 뉴스 시각화 레이아웃
                     with st.container():
                         st.markdown("---")
                         col1, col2 = st.columns([1, 1], gap="large")
-                        # 가장 많이 발생한 단어 시각화 및 워드 클라우드 생성
+
+                        # 워드 클라우드 및 주요 단어 분석
                         with col1:
-                            st.subheader('가장 많이 발생한 단어 | 워드 클라우드')
+                            st.subheader('💭 가장 많이 발생한 단어 | 워드 클라우드')
                             tokens = []
                             kiwi = Kiwi()
                             for sublist in filtered_data['sentences']:
@@ -211,67 +251,91 @@ def main():
 
                                         if analyzed:
                                             morphs = analyzed[0][0]
-                                            for token in morphs:
-                                                if token.tag.startswith('N') and len(token.form) > 1:
-                                                    tokens.append(token.form)
+
+                                        for token in morphs:
+                                            if token.tag.startswith('N') and len(token.form) > 1 and token.form not in stopwords:
+                                                tokens.append(token.form)
                             all_text = ' '.join(tokens)
                             wordcloud_fig = create_wordcloud(all_text)
                             st.pyplot(wordcloud_fig)
-                            
-                            # 워드 카운트 시각화
-                            st.subheader('가장 많이 발생한 단어')
+
+                            # 주요 단어 빈도 테이블
                             word_count = Counter(tokens)
                             word_count_df = pd.DataFrame(word_count.items(), columns=['Word', 'Count']).sort_values(by='Count', ascending=False).head(10)
-                            # 이쁘게 꾸민 표로 단어 출력
-                            st.markdown("<style>table {width: 100%; text-align: left;} th, td {padding: 8px; text-align: left; border-bottom: 1px solid #ddd;} tr:hover {background-color: #f5f5f5;}</style>", unsafe_allow_html=True)
-                            st.markdown(word_count_df.to_html(index=False), unsafe_allow_html=True)
+                            st.table(word_count_df)
 
-                        # 관련 버튼 및 워드 네트워크 시각화
-                        with col2:
-                            st.subheader('관련 버튼 | 워드 네트워크')
-                            # 단어 클릭 시 네트워크 시각화
+                            st.markdown("---")
+                            st.subheader('🌎 관련 버튼 | 워드 네트워크')
                             for word in word_count_df['Word']:
-                                with st.expander(f"{word} 유사 단어 네트워크 보기"):
+                                with st.expander(f"🛠️ {word} 유사 단어 네트워크 보기"):
                                     expanded_network_html = visualize_expanded_word_network(word.replace('/', '_'), w2v_model)
-                                    components.html(expanded_network_html, height=750)
+                                    components.html(expanded_network_html, height=500)
 
-                            # 워드 네트워크 시각화
-                            st.subheader('카테고리 중심 워드 네트워크')
-                            if len(tokens) > 1:
-                                top_keywords = word_count_df['Word'].tolist()
-                                word_network_html = visualize_main_word_network(selected_category.replace('/', '_'), top_keywords, w2v_model)
-                                components.html(word_network_html, height=750)
-                            else:
-                                st.warning('워드 네트워크를 생성하기에 충분한 데이터가 없습니다.')
+                        # 워드 네트워크 시각화
+                        with col2:
+                            # 긍정, 부정 평가 시각화
+                            st.subheader('🗳️ 긍정, 부정 평가')
+                            sentiments = filtered_data['content'].apply(lambda x: analyze_sentiment(' '.join(x)))
+                            filtered_data['sentiment'] = sentiments
+                            sentiment_counts = sentiments.value_counts().to_dict()
+                            sentiment_df = pd.DataFrame(list(sentiment_counts.items()), columns=['Sentiment', 'Count'])
+                            pie_chart = alt.Chart(sentiment_df).mark_arc(innerRadius=50).encode(
+                                theta=alt.Theta('Count', stack=True),
+                                color=alt.Color('Sentiment', scale=alt.Scale(scheme='category10')),
+                                tooltip=['Sentiment', 'Count']
+                            ).properties(height=300)
+                            st.altair_chart(pie_chart, use_container_width=True)
 
-                    # 주요 키워드 시각화
+                            # 긍정, 부정 데이터 각각 5개씩 표로 나타내기
+                            st.markdown("---")
+                            st.subheader('✅ 긍정 뉴스 예시')
+                            positive_data = filtered_data[sentiments == '긍정'].head(5)
+                            st.table(positive_data[['title', 'publisher', 'url']])
+
+                            st.subheader('❌ 부정 뉴스 예시')
+                            negative_data = filtered_data[sentiments == '부정'].head(5)
+                            st.table(negative_data[['title', 'publisher', 'url']])
+
+                            # 긍정, 부정 뉴스의 주요 단어 분석
+                            st.markdown("---")
+                            st.subheader('💬 긍정 뉴스에서 가장 많이 발생한 단어')
+                            positive_tokens = []
+                            for sublist in positive_data['sentences']:
+                                for sentence in sublist:
+                                    for word in sentence:
+                                        analyzed = kiwi.analyze(word)
+                                        if analyzed:
+                                            morphs = analyzed[0][0]
+                                            for token in morphs:
+                                                if token.tag.startswith('N') and len(token.form) > 1 and token.form not in stopwords:
+                                                    positive_tokens.append(token.form)
+                            positive_word_count = Counter(positive_tokens)
+                            positive_word_count_df = pd.DataFrame(positive_word_count.items(), columns=['Word', 'Count']).sort_values(by='Count', ascending=False).head(10)
+                            st.table(positive_word_count_df)
+
+                            st.subheader('💬 부정 뉴스에서 가장 많이 발생한 단어')
+                            negative_tokens = []
+                            for sublist in negative_data['sentences']:
+                                for sentence in sublist:
+                                    for word in sentence:
+                                        analyzed = kiwi.analyze(word)
+                                        if analyzed:
+                                            morphs = analyzed[0][0]
+                                            for token in morphs:
+                                                if token.tag.startswith('N') and len(token.form) > 1 and token.form not in stopwords:
+                                                    negative_tokens.append(token.form)
+                            negative_word_count = Counter(negative_tokens)
+                            negative_word_count_df = pd.DataFrame(negative_word_count.items(), columns=['Word', 'Count']).sort_values(by='Count', ascending=False).head(10)
+                            st.table(negative_word_count_df)
+                    
                     st.markdown("---")
-                    st.subheader('주요 키워드')
-                    top_keywords = word_count_df['Word'].tolist()
-                    st.write(f"주요 키워드: {', '.join(top_keywords)}")
-
-                    # 뉴스 요약 출력
-                    st.subheader('뉴스 요약 (주요 키워드 관련 기사)')
-                    for keyword in top_keywords:
-                        st.write(f"### 키워드: {keyword}")
-                        keyword_articles = filtered_data[filtered_data['content'].apply(lambda x: any(keyword in sentence for sentence in x))].head(5)
-                        for i, row in keyword_articles.iterrows():
-                            st.markdown(f"<div style='padding: 10px; border: 1px solid #ddd; border-radius: 5px; margin-bottom: 5px;'> <a href='{row['url']}' target='_blank' style='text-decoration: none; color: #2a9d8f;'> <strong>{row['title']}</strong></a></div>", unsafe_allow_html=True)
-
-                    # 긍정, 부정 평가 시각화
-                    st.subheader('긍정, 부정 평가')
-                    sentiments = filtered_data['content'].apply(lambda x: analyze_sentiment(' '.join(x)))
-                    sentiment_counts = sentiments.value_counts().to_dict()
-                    sentiment_df = pd.DataFrame(list(sentiment_counts.items()), columns=['Sentiment', 'Count'])
-                    pie_chart = alt.Chart(sentiment_df).mark_arc(innerRadius=50).encode(
-                        theta=alt.Theta('Count', stack=True),
-                        color=alt.Color('Sentiment', scale=alt.Scale(scheme='category10'))
-                    )
-                    try:
-                        st.altair_chart(pie_chart, use_container_width=True)
-                    except ValueError as e:
-                        st.error(f"파이차트 생성 중 오류가 발생했습니다: {e}")
-
+                    st.subheader(f'🛈 {selected_category} 중심 워드 네트워크')
+                    if len(tokens) > 1:
+                        top_keywords = word_count_df['Word'].tolist()
+                        word_network_html = visualize_main_word_network(selected_category.replace('/', '_'), top_keywords, w2v_model)
+                        components.html(word_network_html, height=500)
+                    else:
+                        st.warning('워드 네트워크를 생성하기에 충분한 데이터가 없습니다.')
 
 if __name__ == "__main__":
     main()
