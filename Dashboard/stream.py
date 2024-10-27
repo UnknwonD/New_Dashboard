@@ -210,7 +210,7 @@ def main():
                             for i, row in category_news.iterrows():
                                 st.markdown(f"<div style='margin-bottom: 10px;'><strong>{i + 1}. <a href='{row['url']}' target='_blank'>{row['title']}</a></strong> 🌐 {row['publisher']}</div>", unsafe_allow_html=True)
 
-                    # 분야별 뉴스 개수 시각화
+                    # 분야별 뉴스 개수 및 긍/부정 비율 시각화
                     with chart_col:
                         st.subheader('📊 분야별 뉴스 개수')
                         news_count_by_category = df['category'].value_counts()
@@ -221,6 +221,18 @@ def main():
                             tooltip=['Category', 'Count']
                         ).properties(height=300)
                         st.altair_chart(category_chart, use_container_width=True)
+
+                        # 분야별 긍/부정 비율 시각화
+                        st.subheader('📊 분야별 긍정/부정 비율')
+                        df['sentiment'] = df['content'].apply(lambda x: analyze_sentiment(' '.join(x)))
+                        sentiment_category_df = df.groupby(['category', 'sentiment']).size().reset_index(name='count')
+                        sentiment_chart = alt.Chart(sentiment_category_df).mark_bar().encode(
+                            x=alt.X('count', title='Count'),
+                            y=alt.Y('category', title='Category', sort='-x'),
+                            color='sentiment',
+                            tooltip=['category', 'sentiment', 'count']
+                        ).properties(height=300)
+                        st.altair_chart(sentiment_chart, use_container_width=True)
 
             # 카테고리별 탭 구성
             for idx, selected_category in enumerate(tab_labels[1:]):
@@ -235,99 +247,111 @@ def main():
                     w2v_model = train_word2vec_model(sentences)
 
                     # 카테고리 상세 뉴스 시각화 레이아웃
-                    with st.container():
-                        st.markdown("---")
-                        col1, col2 = st.columns([1, 1], gap="large")
+                    st.markdown("---")
+                    st.subheader('💭 가장 많이 발생한 단어 및 네트워크 분석')
+                    cloud_network_col1, cloud_network_col2 = st.columns([1, 1], gap="large")
 
-                        # 워드 클라우드 및 주요 단어 분석
-                        with col1:
-                            st.subheader('💭 가장 많이 발생한 단어 | 워드 클라우드')
-                            tokens = []
-                            kiwi = Kiwi()
-                            for sublist in filtered_data['sentences']:
-                                for sentence in sublist:
-                                    for word in sentence:
-                                        analyzed = kiwi.analyze(word)
+                    # 워드 클라우드 및 주요 단어 분석
+                    with cloud_network_col1:
+                        st.subheader('🔍 워드 클라우드')
+                        tokens = []
+                        kiwi = Kiwi()
+                        for sublist in filtered_data['sentences']:
+                            for sentence in sublist:
+                                for word in sentence:
+                                    analyzed = kiwi.analyze(word)
 
-                                        if analyzed:
-                                            morphs = analyzed[0][0]
+                                    if analyzed:
+                                        morphs = analyzed[0][0]
 
+                                    for token in morphs:
+                                        if token.tag.startswith('N') and len(token.form) > 1 and token.form not in stopwords:
+                                            tokens.append(token.form)
+                        all_text = ' '.join(tokens)
+                        wordcloud_fig = create_wordcloud(all_text)
+                        st.pyplot(wordcloud_fig)
+
+                        # 주요 단어 빈도 테이블
+                        word_count = Counter(tokens)
+                        word_count_df = pd.DataFrame(word_count.items(), columns=['Word', 'Count']).sort_values(by='Count', ascending=False).head(10)
+                        st.table(word_count_df)
+
+                    # 워드 네트워크 시각화
+                    with cloud_network_col2:
+                        st.subheader('🌐 단어 네트워크')
+                        for word in word_count_df['Word']:
+                            with st.expander(f"🛠️ {word} 유사 단어 네트워크 보기"):
+                                expanded_network_html = visualize_expanded_word_network(word.replace('/', '_'), w2v_model)
+                                components.html(expanded_network_html, height=500)
+
+                    # 긍정, 부정 평가 시각화 및 뉴스 예시
+                    st.markdown("---")
+                    st.subheader('🗳️ 긍정, 부정 평가 비율 및 뉴스')
+                    pos_neg_col1, pos_neg_col2 = st.columns([1, 1], gap="large")
+
+                    # 긍정, 부정 평가 시각화
+                    with pos_neg_col1:
+                        st.subheader('📊 긍/부정 비율')
+                        sentiments = filtered_data['content'].apply(lambda x: analyze_sentiment(' '.join(x)))
+                        filtered_data['sentiment'] = sentiments
+                        sentiment_counts = sentiments.value_counts().to_dict()
+                        sentiment_df = pd.DataFrame(list(sentiment_counts.items()), columns=['Sentiment', 'Count'])
+                        pie_chart = alt.Chart(sentiment_df).mark_arc(innerRadius=50).encode(
+                            theta=alt.Theta('Count', stack=True),
+                            color=alt.Color('Sentiment', scale=alt.Scale(scheme='category10')),
+                            tooltip=['Sentiment', 'Count']
+                        ).properties(height=300)
+                        st.altair_chart(pie_chart, use_container_width=True)
+
+                    # 긍정, 부정 뉴스
+                    with pos_neg_col2:
+                        st.subheader('✅ 긍정 뉴스 TOP 5')
+                        positive_data = filtered_data[filtered_data['sentiment'] == '긍정'].head(5)
+                        for i, row in positive_data.iterrows():
+                            st.markdown(f"<div style='margin-bottom: 10px;'><strong>{i + 1}. <a href='{row['url']}' target='_blank'>{row['title']}</a></strong> 🌐 {row['publisher']}</div>", unsafe_allow_html=True)
+
+                        st.subheader('❌ 부정 뉴스 TOP 5')
+                        negative_data = filtered_data[filtered_data['sentiment'] == '부정'].head(5)
+                        for i, row in negative_data.iterrows():
+                            st.markdown(f"<div style='margin-bottom: 10px;'><strong>{i + 1}. <a href='{row['url']}' target='_blank'>{row['title']}</a></strong> 🌐 {row['publisher']}</div>", unsafe_allow_html=True)
+
+                    # 긍정, 부정 뉴스의 주요 단어 분석
+                    st.markdown("---")
+                    st.subheader('💬 긍정 및 부정 뉴스에서 가장 많이 발생한 단어')
+                    pos_neg_word_col1, pos_neg_word_col2 = st.columns([1, 1], gap="large")
+
+                    with pos_neg_word_col1:
+                        st.subheader('💬 긍정 뉴스에서 가장 많이 발생한 단어')
+                        positive_tokens = []
+                        for sublist in positive_data['sentences']:
+                            for sentence in sublist:
+                                for word in sentence:
+                                    analyzed = kiwi.analyze(word)
+                                    if analyzed:
+                                        morphs = analyzed[0][0]
                                         for token in morphs:
                                             if token.tag.startswith('N') and len(token.form) > 1 and token.form not in stopwords:
-                                                tokens.append(token.form)
-                            all_text = ' '.join(tokens)
-                            wordcloud_fig = create_wordcloud(all_text)
-                            st.pyplot(wordcloud_fig)
+                                                positive_tokens.append(token.form)
+                        positive_word_count = Counter(positive_tokens)
+                        positive_word_count_df = pd.DataFrame(positive_word_count.items(), columns=['Word', 'Count']).sort_values(by='Count', ascending=False).head(10)
+                        st.table(positive_word_count_df)
 
-                            # 주요 단어 빈도 테이블
-                            word_count = Counter(tokens)
-                            word_count_df = pd.DataFrame(word_count.items(), columns=['Word', 'Count']).sort_values(by='Count', ascending=False).head(10)
-                            st.table(word_count_df)
+                    with pos_neg_word_col2:
+                        st.subheader('💬 부정 뉴스에서 가장 많이 발생한 단어')
+                        negative_tokens = []
+                        for sublist in negative_data['sentences']:
+                            for sentence in sublist:
+                                for word in sentence:
+                                    analyzed = kiwi.analyze(word)
+                                    if analyzed:
+                                        morphs = analyzed[0][0]
+                                        for token in morphs:
+                                            if token.tag.startswith('N') and len(token.form) > 1 and token.form not in stopwords:
+                                                negative_tokens.append(token.form)
+                        negative_word_count = Counter(negative_tokens)
+                        negative_word_count_df = pd.DataFrame(negative_word_count.items(), columns=['Word', 'Count']).sort_values(by='Count', ascending=False).head(10)
+                        st.table(negative_word_count_df)
 
-                            st.markdown("---")
-                            st.subheader('🌎 관련 버튼 | 워드 네트워크')
-                            for word in word_count_df['Word']:
-                                with st.expander(f"🛠️ {word} 유사 단어 네트워크 보기"):
-                                    expanded_network_html = visualize_expanded_word_network(word.replace('/', '_'), w2v_model)
-                                    components.html(expanded_network_html, height=500)
-
-                        # 워드 네트워크 시각화
-                        with col2:
-                            # 긍정, 부정 평가 시각화
-                            st.subheader('🗳️ 긍정, 부정 평가')
-                            sentiments = filtered_data['content'].apply(lambda x: analyze_sentiment(' '.join(x)))
-                            filtered_data['sentiment'] = sentiments
-                            sentiment_counts = sentiments.value_counts().to_dict()
-                            sentiment_df = pd.DataFrame(list(sentiment_counts.items()), columns=['Sentiment', 'Count'])
-                            pie_chart = alt.Chart(sentiment_df).mark_arc(innerRadius=50).encode(
-                                theta=alt.Theta('Count', stack=True),
-                                color=alt.Color('Sentiment', scale=alt.Scale(scheme='category10')),
-                                tooltip=['Sentiment', 'Count']
-                            ).properties(height=300)
-                            st.altair_chart(pie_chart, use_container_width=True)
-
-                            # 긍정, 부정 데이터 각각 5개씩 표로 나타내기
-                            st.markdown("---")
-                            st.subheader('✅ 긍정 뉴스 예시')
-                            positive_data = filtered_data[sentiments == '긍정'].head(5)
-                            st.table(positive_data[['title', 'publisher', 'url']])
-
-                            st.subheader('❌ 부정 뉴스 예시')
-                            negative_data = filtered_data[sentiments == '부정'].head(5)
-                            st.table(negative_data[['title', 'publisher', 'url']])
-
-                            # 긍정, 부정 뉴스의 주요 단어 분석
-                            st.markdown("---")
-                            st.subheader('💬 긍정 뉴스에서 가장 많이 발생한 단어')
-                            positive_tokens = []
-                            for sublist in positive_data['sentences']:
-                                for sentence in sublist:
-                                    for word in sentence:
-                                        analyzed = kiwi.analyze(word)
-                                        if analyzed:
-                                            morphs = analyzed[0][0]
-                                            for token in morphs:
-                                                if token.tag.startswith('N') and len(token.form) > 1 and token.form not in stopwords:
-                                                    positive_tokens.append(token.form)
-                            positive_word_count = Counter(positive_tokens)
-                            positive_word_count_df = pd.DataFrame(positive_word_count.items(), columns=['Word', 'Count']).sort_values(by='Count', ascending=False).head(10)
-                            st.table(positive_word_count_df)
-
-                            st.subheader('💬 부정 뉴스에서 가장 많이 발생한 단어')
-                            negative_tokens = []
-                            for sublist in negative_data['sentences']:
-                                for sentence in sublist:
-                                    for word in sentence:
-                                        analyzed = kiwi.analyze(word)
-                                        if analyzed:
-                                            morphs = analyzed[0][0]
-                                            for token in morphs:
-                                                if token.tag.startswith('N') and len(token.form) > 1 and token.form not in stopwords:
-                                                    negative_tokens.append(token.form)
-                            negative_word_count = Counter(negative_tokens)
-                            negative_word_count_df = pd.DataFrame(negative_word_count.items(), columns=['Word', 'Count']).sort_values(by='Count', ascending=False).head(10)
-                            st.table(negative_word_count_df)
-                    
                     st.markdown("---")
                     st.subheader(f'🛈 {selected_category} 중심 워드 네트워크')
                     if len(tokens) > 1:
