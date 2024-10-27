@@ -8,7 +8,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from sqlalchemy import create_engine, Table, MetaData, select
 from webdriver_manager.chrome import ChromeDriverManager
-from summarizer import Summarizer
+# from summarizer import Summarizer
 from kiwipiepy import Kiwi
 from tqdm import tqdm
 # from api import db_url
@@ -16,6 +16,7 @@ import os
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../DB_Update')))
 from DB_UPDATE_FIRST import update_db
+import requests
 
 # 크롬 옵션 설정
 chrome_options = Options()
@@ -154,18 +155,27 @@ def split_text(text, max_length=512):
     
     return chunks
 
-def extractive_summarize_korean_text(text, compression_ratio=0.3):
-    # 긴 텍스트 분할
-    chunks = split_text(text)
-    model = Summarizer()
+# def extractive_summarize_korean_text(text, compression_ratio=0.3):
+#     # 긴 텍스트 분할
+#     chunks = split_text(text)
+#     model = Summarizer()
 
-    # 각 청크에 대해 요약 수행 후 합치기
-    summarized_chunks = [model(chunk, ratio=compression_ratio) for chunk in chunks]
-    summary = " ".join(summarized_chunks)
+#     # 각 청크에 대해 요약 수행 후 합치기
+#     summarized_chunks = [model(chunk, ratio=compression_ratio) for chunk in chunks]
+#     summary = " ".join(summarized_chunks)
     
-    return summary
+#     return summary
 
-
+def extract_content(url):
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        content = soup.find(id='dic_area')
+        return content.text if content else None
+    except requests.exceptions.RequestException as e:
+        print('Content를 불러올 수 없습니다. : ', e)
+        return None
 
 def str_to_date(phrase):
     result_time = datetime.now()
@@ -182,91 +192,102 @@ def str_to_date(phrase):
     
     return result_time.strftime('%Y-%m-%d %H:%M')
 
-# 기존 데이터 불러오기
-df = pd.read_csv('news_data.csv', encoding='utf-8-sig')
-driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
-cnt = 0
-kiwi = Kiwi(num_workers=5)
-
-total_data = len(df)
-while True:
+def collect_news_by_category(category):
+    df = pd.read_csv('news_data.csv', encoding='utf-8-sig')
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+    kiwi = Kiwi(num_workers=5)
     news_data = []
     start_time = datetime.now()
 
-    for category in [100, 101, 102, 103, 104]:
-        for sub in CATEGORY[category]:
-            base_url = 'https://news.naver.com/breakingnews/section/' + str(category) + '/' + sub
-            print(base_url)
+    for sub in CATEGORY[category]:
+        base_url = 'https://news.naver.com/breakingnews/section/' + str(category) + '/' + sub
+        print(base_url)
 
-            driver.get(base_url)
-            time.sleep(3)
+        driver.get(base_url)
+        time.sleep(3)
 
-            for _ in range(100):
-                try:
-                    driver.find_element(By.CSS_SELECTOR, 'a.section_more_inner').click()
-                except:
-                    break
-                finally:
-                    time.sleep(1)
+        # Improved scrolling mechanism to avoid too many requests at once
+        try:
+            while True:
+                driver.find_element(By.CSS_SELECTOR, 'a.section_more_inner').click()
+                time.sleep(1)
+        except:
+            pass
 
-            html = driver.page_source
-            soup = BeautifulSoup(html, 'html.parser')
+        html = driver.page_source
+        soup = BeautifulSoup(html, 'html.parser')
+        news_body = soup.select('div.section_article')
 
-            news_body = soup.select('div.section_article')
+        for news in tqdm(news_body):
+            contents = news.select('li.sa_item')
+            for content in contents:
+                title = content.select_one('a.sa_text_title > strong').text if content.select_one('a.sa_text_title > strong') else "-"
+                title = replace_hanja(title)
 
-            for news in tqdm(news_body):
-                contents = news.select('li.sa_item')
-                for content in contents:
-                    title = content.select_one('a.sa_text_title > strong').text if content.select_one('a.sa_text_title > strong') else "-"
-                    title = replace_hanja(title)
+                url = content.select_one('a.sa_text_title')['href'] if content.select_one('a.sa_text_title') else "-"
+                publisher = content.select_one('div.sa_text_press').text if content.select_one('div.sa_text_press') else "-"
+                date = content.select_one('div.sa_text_datetime > b').text if content.select_one('div.sa_text_datetime > b') else "-"
 
-                    url = content.select_one('a.sa_text_title')['href'] if content.select_one('a.sa_text_title') else "-"
-                    # detail = content.select_one('div.sa_text_lede').text if content.select_one('div.sa_text_lede') else "-"
-                    publisher = content.select_one('div.sa_text_press').text if content.select_one('div.sa_text_press') else "-"
-                    date = content.select_one('div.sa_text_datetime > b').text if content.select_one('div.sa_text_datetime > b') else "-"
-                    
-                    row = {
-                        'category': cat_dict[category],
-                        'sub_category': sub_dict[sub],
-                        'title': title,
-                        'content': '-',
-                        'publisher': publisher,
-                        'date': str_to_date(date),
-                        'sentences': '-',
-                        'url' : url,
-                        'summary' : '-'
-                    }
-                    
-                    news_data.append(row)
+                content = extract_content(url)
 
-    # 새로운 데이터를 DataFrame으로 생성
+                if content:
+                    content = replace_hanja(content)
+                    sentence = kiwi.split_into_sents(content)
+                    total_sentence = []
+                    tokens = []
+                    for sen in sentence:
+                        target_sen = sen.text.replace('\n', ' ')
+                        total_sentence.append(target_sen)
+                        tmp_tokens = [
+                            word.form + ('다' if word.tag.startswith('VV') else '')
+                            for word in kiwi.tokenize(target_sen)
+                            if word.tag.startswith('NN') or word.tag.startswith('VV')
+                        ]
+                        tokens.append(tmp_tokens)
+                else:
+                    total_sentence = '-'
+                    tokens = '-'
+
+                row = {
+                    'category': cat_dict[category],
+                    'sub_category': sub_dict[sub],
+                    'title': title,
+                    'content': total_sentence,
+                    'publisher': publisher,
+                    'date': str_to_date(date),
+                    'sentences': tokens,
+                    'url': url,
+                    'summary': '-'
+                }
+                news_data.append(row)
+
+    driver.quit()
     new_data_df = pd.DataFrame(news_data)
-
-    # 기존 데이터와 중복 제거
     df = pd.concat([df, new_data_df], ignore_index=True)
     df.drop_duplicates(subset='title', keep='first', inplace=True)
-    
-    new_data = len(df) - total_data
-    total_data = len(df)
-    # CSV 파일로 데이터 저장
+
     try:
         df.to_csv('news_data.csv', index=False, encoding='utf-8-sig')
-    except:
-        print('데이터 저장 실패')
+        print(f'카테고리 {category} 데이터 저장 성공')
+    except Exception as e:
+        print('데이터 저장 실패:', e)
+    
     try:
         update_db(df)
         print('DB 업데이트 성공')
     except Exception as e:
         print('DB 업데이트 실패 : ', e)
+    
+    print(f'카테고리 {category} 수집 완료 - 시작시간: {start_time}, 종료시간: {datetime.now()}')
 
-    print(f'''
-[{cnt}회 수집 결과]
-시작시간 : {start_time}
-종료시간 : {datetime.now()}
-전체 데이터 수 : {total_data}
-data 수집된 개수 : {new_data}
-    ''')
-    cnt += 1
+def main():
+    while True:
+        categories = [100, 101, 102, 103, 104]
+        for category in categories:
+            collect_news_by_category(category)
+        
+        print('2시간 뒤에 다시 수집합니다.')
+        time.sleep(7200)
 
-    print('3시간 뒤에 다시 수집합니다.')
-    time.sleep(18000)
+if __name__ == "__main__":
+    main()

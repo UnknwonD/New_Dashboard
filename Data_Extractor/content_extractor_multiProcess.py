@@ -15,9 +15,11 @@ import re
 import sys
 from tqdm import tqdm
 from api import db_url
-from summarizer import Summarizer
+# from summarizer import Summarizer
 from kiwipiepy import Kiwi
 from multiprocessing import Pool, cpu_count
+import requests
+from bs4 import BeautifulSoup
 
 replace_dict = {
     '尹': '윤석열',
@@ -86,16 +88,17 @@ def split_text(text, max_length=512):
     
     return chunks
 
-model = Summarizer()
-def extractive_summarize_korean_text(text, compression_ratio=0.3):
-    # 긴 텍스트 분할
-    chunks = split_text(text)
+# model = Summarizer()
 
-    # 각 청크에 대해 요약 수행 후 합치기
-    summarized_chunks = [model(chunk, ratio=compression_ratio) for chunk in chunks]
-    summary = " ".join(summarized_chunks)
+# def extractive_summarize_korean_text(text, compression_ratio=0.3):
+#     # 긴 텍스트 분할
+#     chunks = split_text(text)
+
+#     # 각 청크에 대해 요약 수행 후 합치기
+#     summarized_chunks = [model(chunk, ratio=compression_ratio) for chunk in chunks]
+#     summary = " ".join(summarized_chunks)
     
-    return summary
+#     return summary
 
 # 크롬 옵션 설정
 chrome_options = Options()
@@ -115,22 +118,26 @@ def data_load():
     return df
 
 def extract_content(url):
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
     try:
-        driver.get(url)
-        time.sleep(0.5)
-        content = driver.find_element(By.ID, 'dic_area').text
-        driver.quit()
-        return content
-    except Exception as e:
+        response = requests.get(url)
+        response.raise_for_status()  # 요청이 성공적인지 확인
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        content = soup.find(id='dic_area')
+        if content:
+            return content.text
+        else:
+            print('ID가 "dic_area"인 요소를 찾을 수 없습니다.')
+            return None
+    except requests.exceptions.RequestException as e:
         print('Content를 불러올 수 없습니다. : ', e)
-        driver.quit()
         return None
+
 
 def process_category(category_df):
     engine = create_engine(db_url)
     kiwi = Kiwi(num_workers=0)
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+    # driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
     
     for i, row in tqdm(category_df.iterrows(), total=category_df.shape[0]):
         target_url = row['url']
@@ -152,12 +159,13 @@ def process_category(category_df):
                 ]
                 tokens.append(tmp_tokens)
             
+            summary = '-'
             # 요약 생성
-            try:
-                summary = extractive_summarize_korean_text(content, compression_ratio=0.4)
-            except Exception as e:
-                print('Summary를 만들 수 없습니다. : ',  e)
-                summary = '-'
+            # try:
+            #     summary = extractive_summarize_korean_text(content, compression_ratio=0.4)
+            # except Exception as e:
+            #     print('Summary를 만들 수 없습니다. : ',  e)
+            #     summary = '-'
         else:
             total_sentence = '-'
             tokens = '-'
@@ -184,7 +192,7 @@ def process_category(category_df):
             except Exception as e:
                 print(f"Failed to update row {row['seq']}: {e}")
     
-    driver.quit()
+    # driver.quit()
 
 def main():
     df = data_load()
