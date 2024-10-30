@@ -173,6 +173,17 @@ def data_load(target_date):
     
     return df
 
+import streamlit as st
+import pandas as pd
+import altair as alt
+from collections import Counter
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
+from kiwipiepy import Kiwi
+import streamlit.components.v1 as components
+import os
+
+
 def main():
     # 페이지 기본 설정
     st.set_page_config(layout='wide', page_title='데일리 뉴스 리포트 대시보드', page_icon='📊')
@@ -181,17 +192,48 @@ def main():
     st.sidebar.title('데일리 뉴스 리포트')
     st.sidebar.subheader("데이터 선택")
     selected_date = st.sidebar.date_input('날짜 선택', pd.Timestamp('today'))
-    
+
+    # 사이드바 - 특정 단어 필터링 기능
+    st.sidebar.subheader("🔍 특정 단어로 기사 필터링")
+    filter_keywords = st.sidebar.text_area("검색할 단어들을 입력하세요 (쉼표로 구분):")
+    filter_keywords = [word.strip() for word in filter_keywords.split(',') if word.strip()]  # 쉼표로 구분된 단어 리스트로 변환
+    reset_filter = st.sidebar.button("🔄 필터 초기화")
+
     # 데이터 불러오기
     if selected_date:
         df = data_load(selected_date)
         if df.empty:
             st.warning("선택한 날짜에 해당하는 데이터가 없습니다.")
         else:
+            # 필터 적용
+            if filter_keywords:
+                df = df[df['content'].apply(lambda x: any(keyword in ' '.join(x) for keyword in filter_keywords))]
+
+            if reset_filter:
+                filter_keywords = []  # 필터 초기화
+
             st.title(f"📍 {selected_date.strftime('%Y년 %m월 %d일')} 데일리 뉴스 리포트")
             # 탭 구조로 뉴스 세부 정보 표시 (탭을 상단에 배치)
             tab_labels = ['메인', '정치', '경제', '사회', '생활/문화', 'IT/과학']
             tabs = st.tabs(tab_labels)
+
+            # 사이드바 - 실시간 WORDCOUNT TOP 10 단어
+            st.sidebar.subheader("🔥 실시간 인기 단어 TOP 10")
+            all_tokens = []
+            kiwi = Kiwi()
+            for sublist in df['sentences']:
+                for sentence in sublist:
+                    for word in sentence:
+                        analyzed = kiwi.analyze(word)
+                        if analyzed:
+                            morphs = analyzed[0][0]
+                            for token in morphs:
+                                if token.tag.startswith('N') and len(token.form) > 1:
+                                    all_tokens.append(token.form)
+            word_count = Counter(all_tokens)
+            word_count_df = pd.DataFrame(word_count.items(), columns=['Word', 'Count']).sort_values(by='Count', ascending=False).head(10)
+            for i, (index, row) in enumerate(word_count_df.iterrows()):
+                st.sidebar.markdown(f"**{i + 1}. {row['Word']}**")
 
             # 메인 화면 레이아웃 - 컬럼 사용으로 가독성 개선
             with tabs[0]:
@@ -206,8 +248,8 @@ def main():
                         categories = df['category'].unique()
                         for category in categories:
                             st.markdown(f"### 🌐 {category} 뉴스")
-                            category_news = df[df['category'] == category].head(5)
-                            for i, row in category_news.iterrows():
+                            category_news = df[df['category'] == category].tail(5)
+                            for i, (index, row) in enumerate(category_news.iterrows()):
                                 st.markdown(f"<div style='margin-bottom: 10px;'><strong>{i + 1}. <a href='{row['url']}' target='_blank'>{row['title']}</a></strong> 🌐 {row['publisher']}</div>", unsafe_allow_html=True)
 
                     # 분야별 뉴스 개수 및 긍/부정 비율 시각화
@@ -255,7 +297,6 @@ def main():
                     with cloud_network_col1:
                         st.subheader('🔍 워드 클라우드')
                         tokens = []
-                        kiwi = Kiwi()
                         for sublist in filtered_data['sentences']:
                             for sentence in sublist:
                                 for word in sentence:
@@ -306,13 +347,13 @@ def main():
                     # 긍정, 부정 뉴스
                     with pos_neg_col2:
                         st.subheader('✅ 긍정 뉴스 TOP 5')
-                        positive_data = filtered_data[filtered_data['sentiment'] == '긍정'].head(5)
-                        for i, row in positive_data.iterrows():
+                        positive_data = filtered_data[filtered_data['sentiment'] == '긍정'].tail(5)
+                        for i, (index, row) in enumerate(positive_data.iterrows()):
                             st.markdown(f"<div style='margin-bottom: 10px;'><strong>{i + 1}. <a href='{row['url']}' target='_blank'>{row['title']}</a></strong> 🌐 {row['publisher']}</div>", unsafe_allow_html=True)
 
                         st.subheader('❌ 부정 뉴스 TOP 5')
-                        negative_data = filtered_data[filtered_data['sentiment'] == '부정'].head(5)
-                        for i, row in negative_data.iterrows():
+                        negative_data = filtered_data[filtered_data['sentiment'] == '부정'].tail(5)
+                        for i, (index, row) in enumerate(negative_data.iterrows()):
                             st.markdown(f"<div style='margin-bottom: 10px;'><strong>{i + 1}. <a href='{row['url']}' target='_blank'>{row['title']}</a></strong> 🌐 {row['publisher']}</div>", unsafe_allow_html=True)
 
                     # 긍정, 부정 뉴스의 주요 단어 분석

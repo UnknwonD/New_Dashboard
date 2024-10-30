@@ -2,6 +2,7 @@ import time
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 from selenium import webdriver
+from sqlalchemy.exc import IntegrityError
 from selenium.webdriver.common.by import By
 import pandas as pd
 from selenium.webdriver.chrome.options import Options
@@ -9,6 +10,7 @@ from selenium.webdriver.chrome.service import Service
 from sqlalchemy import create_engine, Table, MetaData, select
 from webdriver_manager.chrome import ChromeDriverManager
 # from summarizer import Summarizer
+from sqlalchemy.dialects.mysql import insert
 from kiwipiepy import Kiwi
 from tqdm import tqdm
 # from api import db_url
@@ -16,6 +18,7 @@ import os
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../DB_Update')))
 from DB_UPDATE_FIRST import update_db
+from api import db_url
 import requests
 
 # 크롬 옵션 설정
@@ -193,11 +196,12 @@ def str_to_date(phrase):
     return result_time.strftime('%Y-%m-%d %H:%M')
 
 def collect_news_by_category(category):
-    df = pd.read_csv('news_data.csv', encoding='utf-8-sig')
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
     kiwi = Kiwi(num_workers=5)
-    news_data = []
     start_time = datetime.now()
+    engine = create_engine(db_url)
+
+    collected_rows = []  # Collect rows before inserting to DB
 
     for sub in CATEGORY[category]:
         base_url = 'https://news.naver.com/breakingnews/section/' + str(category) + '/' + sub
@@ -206,9 +210,8 @@ def collect_news_by_category(category):
         driver.get(base_url)
         time.sleep(3)
 
-        # Improved scrolling mechanism to avoid too many requests at once
         try:
-            while True:
+            for _ in range(50):
                 driver.find_element(By.CSS_SELECTOR, 'a.section_more_inner').click()
                 time.sleep(1)
         except:
@@ -228,11 +231,11 @@ def collect_news_by_category(category):
                 publisher = content.select_one('div.sa_text_press').text if content.select_one('div.sa_text_press') else "-"
                 date = content.select_one('div.sa_text_datetime > b').text if content.select_one('div.sa_text_datetime > b') else "-"
 
-                content = extract_content(url)
+                content_text = extract_content(url)
 
-                if content:
-                    content = replace_hanja(content)
-                    sentence = kiwi.split_into_sents(content)
+                if content_text:
+                    content_text = replace_hanja(content_text)
+                    sentence = kiwi.split_into_sents(content_text)
                     total_sentence = []
                     tokens = []
                     for sen in sentence:
@@ -252,33 +255,56 @@ def collect_news_by_category(category):
                     'category': cat_dict[category],
                     'sub_category': sub_dict[sub],
                     'title': title,
-                    'content': total_sentence,
+                    'content': str(total_sentence),
                     'publisher': publisher,
                     'date': str_to_date(date),
-                    'sentences': tokens,
+                    'sentences': str(tokens),
                     'url': url,
                     'summary': '-'
                 }
-                news_data.append(row)
+
+                collected_rows.append(row)
 
     driver.quit()
-    new_data_df = pd.DataFrame(news_data)
-    df = pd.concat([df, new_data_df], ignore_index=True)
-    df.drop_duplicates(subset='title', keep='first', inplace=True)
 
-    try:
-        df.to_csv('news_data.csv', index=False, encoding='utf-8-sig')
-        print(f'카테고리 {category} 데이터 저장 성공')
-    except Exception as e:
-        print('데이터 저장 실패:', e)
-    
-    try:
-        update_db(df)
-        print('DB 업데이트 성공')
-    except Exception as e:
-        print('DB 업데이트 실패 : ', e)
-    
-    print(f'카테고리 {category} 수집 완료 - 시작시간: {start_time}, 종료시간: {datetime.now()}')
+    success_cnt, duplicate_cnt, error_cnt = 0, 0, 0
+    if collected_rows:
+        all_data_df = pd.DataFrame(collected_rows)
+        all_data_df.drop_duplicates(subset=['title', 'url'], keep='first', inplace=True)
+
+        metadata = MetaData()
+        social_data_table = Table('social_data', metadata, autoload_with=engine)
+
+        for _, row in all_data_df.iterrows():
+            insert_stmt = insert(social_data_table).values(
+                category=row['category'],
+                sub_category=row['sub_category'],
+                title=row['title'],
+                content=row['content'],
+                publisher=row['publisher'],
+                date=row['date'],
+                sentences=row['sentences'],
+                url=row['url'],
+                summary=row['summary']
+            )
+
+            try:
+                with engine.connect() as conn:
+                    conn.execute(insert_stmt)
+                    conn.commit()
+                # print(f"DB 업데이트 성공: {row['title']}")
+                success_cnt += 1
+            except IntegrityError:
+                # print(f"DB 업데이트 실패 (중복된 항목): {row['title']}")
+                duplicate_cnt += 1
+            except Exception as e:
+                # print(f"DB 업데이트 실패 ({row['title']}) : ", e)
+                error_cnt += 1
+
+
+
+    print(f'카테고리 {category} 수집 완료 - 시작시간: {start_time}, 종료시간: {datetime.now()} 성공: {success_cnt} 중복: {duplicate_cnt}, 오류: {error_cnt}')
+
 
 def main():
     while True:
@@ -286,8 +312,8 @@ def main():
         for category in categories:
             collect_news_by_category(category)
         
-        print('2시간 뒤에 다시 수집합니다.')
-        time.sleep(7200)
+        print('5시간 뒤에 다시 수집합니다.')
+        time.sleep(18000)
 
 if __name__ == "__main__":
     main()

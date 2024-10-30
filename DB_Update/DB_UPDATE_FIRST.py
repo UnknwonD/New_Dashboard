@@ -19,9 +19,39 @@ def update_db(df):
     print(len(df_new))
 
     # 새로운 데이터만 PostgreSQL에 삽입
-    df_new.to_sql('social_data', engine, if_exists='append', index=False)
+    df.to_sql('social_data', engine, if_exists='append', index=False)
 
-    print(f"{len(df_new)} rows inserted into the social_data table.")
+    print(f"{len(df)} rows inserted into the social_data table.")
+
+# def update_db(df):
+#     # PostgreSQL 연결 설정
+#     engine = create_engine(db_url)
+#     connection = engine.connect()
+
+#     # PostgreSQL 테이블 데이터 불러오기
+#     query = "SELECT * FROM social_data"
+#     df_existing = pd.read_sql(query, connection)
+
+#     # 중복을 제거하고 새롭게 삽입할 데이터만 필터링
+#     # 기준이 되는 열(예: 'id' 또는 'title' 등) 설정
+#     df_new = df[~df['title'].isin(df_existing['title'])]
+
+#     print(f"{len(df_new)} rows to be inserted.")
+
+#     # 하나씩 데이터 삽입
+#     for index, row in df_new.iterrows():
+#         insert_query = """
+#         INSERT INTO social_data (column1, column2, ...) 
+#         VALUES (%s, %s, ...)
+#         """
+#         values = (row['column1'], row['column2'], ...)  # row에서 필요한 컬럼 값들 추출
+#         connection.execute(insert_query, values)
+#         connection.commit()
+
+#     print(f"{len(df_new)} rows inserted into the social_data table.")
+    
+#     # 연결 종료
+#     connection.close()
 
 
 if __name__ == '__main__':
