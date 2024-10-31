@@ -10,7 +10,7 @@ from kiwipiepy import Kiwi
 from textblob import TextBlob
 import streamlit.components.v1 as components
 import ast
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from api import db_url
 from gensim.models import Word2Vec
 
@@ -158,9 +158,12 @@ def data_load(target_date):
     WHERE url IS NOT NULL 
     AND DATE(date) = '{target_date.strftime('%Y-%m-%d')}'
     '''
+
+    sql = text(sql)
     
     # 데이터 로드 및 날짜 형식 변환
-    df = pd.read_sql(sql, engine)
+    with engine.connect() as conn:
+        df = pd.read_sql(sql, conn)
     df['date'] = pd.to_datetime(df['date'], errors='coerce')
 
     # content와 sentences의 '-' 값을 리스트로 변환 후 처리
@@ -183,10 +186,88 @@ from kiwipiepy import Kiwi
 import streamlit.components.v1 as components
 import os
 
+import yfinance as yf
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import MinMaxScaler
+from prophet import Prophet
+import streamlit as st
+
+def stock_prediction_dashboard():
+    st.title('주가 예측 대시보드 📈')
+    st.write("이 페이지에서는 주식 코드와 예측 기간을 입력하여 해당 주식의 향후 가격을 예측합니다.")
+
+    # 주식 코드 입력 폼
+    with st.form(key='stock_form'):
+        st.markdown("### 주식 코드와 예측 기간을 입력하세요:")
+        stock_symbol = st.text_input('주식 코드를 입력하세요 (예: TSLA, AAPL 등)', value='TSLA')
+        prediction_period = st.number_input('예측할 기간을 입력하세요 (일 단위, 최대 30일)', min_value=1, max_value=30, value=10)
+        submit_button = st.form_submit_button(label='예측하기')
+
+    if submit_button:
+        try:
+            # 주식 데이터 불러오기 (최근 3년, 1일 단위)
+            stock = yf.Ticker(stock_symbol)
+            data = stock.history(period="5y", interval="1d")  # 1일 단위로 최근 3년 데이터 가져오기
+
+            # 데이터가 비어 있을 경우 예외 처리
+            if data.empty:
+                st.error("주식 데이터를 불러오지 못했습니다. 주식 코드가 올바른지 확인해주세요.")
+                return
+
+            # Prophet을 사용하기 위해 데이터프레임 형식 변환 (타임존 제거)
+            prophet_data = data.reset_index()[['Date', 'Close']]
+            prophet_data['Date'] = prophet_data['Date'].dt.tz_localize(None)  # 타임존 제거
+            prophet_data.rename(columns={'Date': 'ds', 'Close': 'y'}, inplace=True)
+
+            # Prophet 모델 설정 및 하이퍼파라미터 조정
+            model = Prophet(
+                yearly_seasonality=True,
+                weekly_seasonality=True,
+                daily_seasonality=False,
+                changepoint_prior_scale=0.05  # 변동점 민감도 조정
+            )
+            model.add_seasonality(name='monthly', period=30.5, fourier_order=5)  # 월별 계절성 추가
+            model.fit(prophet_data)
+
+            # 예측을 위한 데이터프레임 생성
+            future = model.make_future_dataframe(periods=prediction_period)
+            forecast = model.predict(future)
+
+            # 음수 예측 값을 0으로 변환
+            forecast['yhat'] = forecast['yhat'].apply(lambda x: max(x, 0))
+
+            # 예측 결과 시각화
+            st.subheader('예측 결과 그래프')
+            plt.rcParams['font.family'] = 'Malgun Gothic'  # Windows 환경에서 한글 폰트 설정
+            plt.figure(figsize=(12, 6))
+            plt.plot(prophet_data['ds'], prophet_data['y'], label='실제 가격', color='blue')
+            plt.plot(forecast['ds'], forecast['yhat'], label='예측 가격', color='red')
+            plt.xlabel('날짜')
+            plt.ylabel('가격')
+            plt.legend()
+            plt.grid(True, linestyle='--', alpha=0.6)
+            st.pyplot(plt)
+
+            # 예측 결과 출력 (예측한 기간만)
+            st.subheader('예측 결과 데이터')
+            future_predictions = forecast[['ds', 'yhat']].tail(prediction_period)
+            future_predictions.columns = ['날짜', '예측 가격']
+            st.dataframe(future_predictions)
+
+            # 상세 결과 개별 표시
+            st.markdown("### 예측된 가격 상세 보기:")
+            for _, row in future_predictions.iterrows():
+                st.write(f"- 날짜: {row['날짜']}, 예측 가격: {row['예측 가격']:.2f}")
+
+        except Exception as e:
+            st.error(f"오류가 발생했습니다: {str(e)}")
 
 def main():
     # 페이지 기본 설정
-    st.set_page_config(layout='wide', page_title='데일리 뉴스 리포트 대시보드', page_icon='📊')
+    # st.set_page_config(layout='wide', page_title='데일리 뉴스 리포트 대시보드', page_icon='📊')
+    st.title('데일리 뉴스 리포트 대시보드 📊')
 
     # 사이드바 및 페이지 제목
     st.sidebar.title('데일리 뉴스 리포트')
@@ -403,4 +484,13 @@ def main():
                         st.warning('워드 네트워크를 생성하기에 충분한 데이터가 없습니다.')
 
 if __name__ == "__main__":
-    main()
+    # main()
+
+    st.set_page_config(layout='wide', page_title='종합 대시보드', page_icon='📊')
+    st.sidebar.title('📊 대시보드 메뉴')
+    page = st.sidebar.radio("이동할 페이지를 선택하세요:", ('데일리 뉴스 리포트', '주가 예측 대시보드'))
+
+    if page == '데일리 뉴스 리포트':
+        main()
+    elif page == '주가 예측 대시보드':
+        stock_prediction_dashboard()
