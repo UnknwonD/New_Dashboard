@@ -11,6 +11,7 @@ from kiwipiepy import Kiwi
 from collections import Counter
 import schedule
 import time
+import ast
 
 def send_email(subject, body, recipients):
     msg = MIMEMultipart()
@@ -54,21 +55,32 @@ def data_load(target_date):
     with engine.connect() as conn:
         df = pd.read_sql(sql, conn)
     df['date'] = pd.to_datetime(df['date'], errors='coerce')
+
+    # content와 sentences의 '-' 값을 리스트로 변환 후 처리
+    df['content'] = df['content'].replace('-', "['-']")
+    df['sentences'] = df['sentences'].replace('-', "['-']")
+
+    # content와 sentences를 리스트 타입으로 변환
+    df['content'] = df['content'].apply(ast.literal_eval)
+    df['sentences'] = df['sentences'].apply(ast.literal_eval)
+    
+    
     return df
 
 # 뉴스 데이터 분석
 def analyze_news_data(df):
     # 형태소 분석기
-    kiwi = Kiwi()
+    kiwi = Kiwi(load_default_dict=True)
     all_tokens = []
     for sublist in df['sentences']:
         for sentence in sublist:
-            analyzed = kiwi.analyze(sentence)
-            if analyzed:
-                morphs = analyzed[0][0]
-                for token in morphs:
-                    if token.tag[0] == 'N' and len(token.form) > 1:  # NNP 태그만 사용하여 의미있는 단어만 추출
-                        all_tokens.append(token.form)
+            for word in sentence:
+                analyzed = kiwi.analyze(word)
+                if analyzed:
+                    morphs = analyzed[0][0]
+                    for token in morphs:
+                        if token.tag == 'NNP' and len(token.form) > 1:  # NNP 태그만 사용하여 의미있는 단어만 추출
+                            all_tokens.append(token.form)
 
     # 단어 빈도 계산 및 데이터프레임 생성
     word_count = Counter(all_tokens)
@@ -115,7 +127,7 @@ def test_email():
         word_count_df = analyze_news_data(df)
         email_content = create_email_content(df, word_count_df)
 
-        recipients = ["daeho5000@ajou.ac.kr"]  # 테스트 수신자 리스트
+        recipients = ["daeho5000@ajou.ac.kr", ""]  # 테스트 수신자 리스트
         send_email("테스트: 데일리 뉴스 리포트", email_content, recipients)
     else:
         print("선택한 날짜에 해당하는 데이터가 없습니다.")
