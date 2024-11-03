@@ -12,7 +12,6 @@ from collections import Counter
 import schedule
 import time
 
-# 메일 발송 정보 설정
 def send_email(subject, body, recipients):
     msg = MIMEMultipart()
     msg['From'] = sender_email
@@ -22,16 +21,21 @@ def send_email(subject, body, recipients):
     msg.attach(MIMEText(body, 'plain'))
 
     # SMTP 서버에 연결 및 메일 발송
-    try:
-        server = smtplib.SMTP(smtp_server, smtp_port)
-        server.starttls()
-        server.login(sender_email, sender_password)
-        server.sendmail(sender_email, recipients, msg.as_string())
-        server.close()
-        print("Email successfully sent to:", recipients)
-    except Exception as e:
-        print("Failed to send email. Error:", e)
-
+    for attempt in range(3):  # 최대 3회 재시도
+        try:
+            server = smtplib.SMTP(smtp_server, smtp_port, timeout=60)
+            server.starttls()
+            server.login(sender_email, sender_password)
+            server.sendmail(sender_email, recipients, msg.as_string())
+            server.close()
+            print("Email successfully sent to:", recipients)
+            break  # 성공적으로 전송된 경우 루프 종료
+        except Exception as e:
+            print(f"Failed to send email on attempt {attempt + 1}. Error:", e)
+            time.sleep(5)  # 재시도 전에 잠깐 대기
+    else:
+        print("All attempts to send email have failed.")
+        
 # 데이터베이스 연결 및 데이터 로드
 def data_load(target_date):
     # 데이터베이스 엔진 생성
@@ -63,15 +67,12 @@ def analyze_news_data(df):
             if analyzed:
                 morphs = analyzed[0][0]
                 for token in morphs:
-                    if token.tag == 'NNP' and len(token.form) > 1:  # NNP 태그만 사용하여 의미있는 단어만 추출
+                    if token.tag[0] == 'N' and len(token.form) > 1:  # NNP 태그만 사용하여 의미있는 단어만 추출
                         all_tokens.append(token.form)
 
     # 단어 빈도 계산 및 데이터프레임 생성
-    if all_tokens:  # 토큰이 있는 경우에만 데이터프레임 생성
-        word_count = Counter(all_tokens)
-        word_count_df = pd.DataFrame(word_count.items(), columns=['Word', 'Count']).sort_values(by='Count', ascending=False).head(10)
-    else:
-        word_count_df = pd.DataFrame(columns=['Word', 'Count'])
+    word_count = Counter(all_tokens)
+    word_count_df = pd.DataFrame(word_count.items(), columns=['Word', 'Count']).sort_values(by='Count', ascending=False).head(10)
     return word_count_df
 
 # 메일 내용 생성
@@ -85,12 +86,9 @@ def create_email_content(df, word_count_df):
         for _, row in category_news.iterrows():
             content += f"- {row['title']} ({row['publisher']})\n  [링크]({row['url']})\n"
 
-    if not word_count_df.empty:
-        content += "\n🔥 실시간 인기 단어 TOP 10:\n"
-        for i, (index, row) in enumerate(word_count_df.iterrows()):
-            content += f"{i + 1}. {row['Word']} - {row['Count']}회\n"
-    else:
-        content += "\n🔥 실시간 인기 단어 TOP 10: 데이터가 부족하여 결과를 표시할 수 없습니다.\n"
+    content += "\n🔥 실시간 인기 단어 TOP 10:\n"
+    for i, (index, row) in enumerate(word_count_df.iterrows()):
+        content += f"{i + 1}. {row['Word']} - {row['Count']}회\n"
 
     return content
 
@@ -103,7 +101,7 @@ def schedule_email():
         word_count_df = analyze_news_data(df)
         email_content = create_email_content(df, word_count_df)
 
-        recipients = ["recipient1@example.com", "recipient2@example.com"]  # 수신자 리스트
+        recipients = ["daeho5000@ajou.ac.kr"]  # 수신자 리스트
         send_email("데일리 뉴스 리포트", email_content, recipients)
     else:
         print("선택한 날짜에 해당하는 데이터가 없습니다.")
