@@ -147,17 +147,27 @@ def visualize_expanded_word_network(main_word, w2v_model):
 
 # Load or create dataframe
 @st.cache_data
-def data_load(target_date):
+def data_load(target_date, word_like = None):
     # 데이터베이스 엔진 생성
     engine = create_engine(db_url)
     
     # SQL 쿼리 생성
-    sql = f'''
-    SELECT * 
-    FROM social_data 
-    WHERE url IS NOT NULL 
-    AND DATE(date) = '{target_date.strftime('%Y-%m-%d')}'
-    '''
+    if word_like:
+        sql = f'''
+        SELECT * 
+        FROM social_data 
+        WHERE url IS NOT NULL 
+        AND title like '%{word_like}%'
+        ORDER BY seq DESC
+        LIMIT 10
+        ''' 
+    else:
+        sql = f'''
+        SELECT * 
+        FROM social_data 
+        WHERE url IS NOT NULL 
+        AND DATE(date) = '{target_date.strftime('%Y-%m-%d')}'
+        '''
 
     sql = text(sql)
     
@@ -203,6 +213,7 @@ def stock_prediction_dashboard():
         st.markdown("### 주식 코드와 예측 기간을 입력하세요:")
         stock_symbol = st.text_input('주식 코드를 입력하세요 (예: TSLA, AAPL 등)', value='TSLA')
         prediction_period = st.number_input('예측할 기간을 입력하세요 (일 단위, 최대 30일)', min_value=1, max_value=30, value=10)
+        related_word = st.text_input('해당 주식과 연관이 있는 키워드를 입력하세요 (예: 트럼프, 테슬라 등, 선택)')
         submit_button = st.form_submit_button(label='예측하기')
 
     if submit_button:
@@ -250,19 +261,28 @@ def stock_prediction_dashboard():
             plt.grid(True, linestyle='--', alpha=0.6)
             st.pyplot(plt)
 
-            # 예측 결과 출력 (예측한 기간만)
-            st.subheader('예측 결과 데이터')
-            future_predictions = forecast[['ds', 'yhat']].tail(prediction_period)
-            future_predictions.columns = ['날짜', '예측 가격']
-            st.dataframe(future_predictions)
+            col1, col2 = st.columns([0.3, 0.7])
+    
+            with col1:
+                # 예측 결과 출력 (예측한 기간만)
+                st.subheader('예측 결과 데이터')
+                future_predictions = forecast[['ds', 'yhat']].tail(prediction_period)
+                future_predictions.columns = ['날짜', '예측 가격']
+                st.dataframe(future_predictions)
+            with col2:
+                if len(related_word) > 1:
+                    df_related = data_load(None, related_word)
 
-            # 상세 결과 개별 표시
-            st.markdown("### 예측된 가격 상세 보기:")
-            for _, row in future_predictions.iterrows():
-                st.write(f"- 날짜: {row['날짜']}, 예측 가격: {row['예측 가격']:.2f}")
+                    st.markdown(f"### 🌐 {related_word} 관련 뉴스")
+                    category_news = df_related.tail(10)
+                    for i, (index, row) in enumerate(category_news.iterrows()):
+                        st.markdown(f"<div style='margin-bottom: 10px;'><strong>{i + 1}. <a href='{row['url']}' target='_blank'>{row['title']}</a></strong> 🌐 {row['publisher']}</div>", unsafe_allow_html=True)
+                else:
+                    st.subheader('📰 주요 뉴스')
 
         except Exception as e:
             st.error(f"오류가 발생했습니다: {str(e)}")
+            st.write('연관어가 입력되지 않았습니다.')
 
 def main():
     # 페이지 기본 설정
