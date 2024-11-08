@@ -5,6 +5,7 @@ from wordcloud import WordCloud
 from collections import Counter
 from pyvis.network import Network
 import altair as alt
+import plotly.graph_objects as go
 import os
 from kiwipiepy import Kiwi
 from textblob import TextBlob
@@ -204,6 +205,13 @@ from sklearn.preprocessing import MinMaxScaler
 from prophet import Prophet
 import streamlit as st
 
+
+# 주식 데이터 가져오기 함수
+def get_stock_data(stock_symbol, period="5y", interval="1d"):
+    stock = yf.Ticker(stock_symbol)
+    return stock.history(period=period, interval=interval)
+
+# Streamlit 주가 예측 대시보드
 def stock_prediction_dashboard():
     st.title('주가 예측 대시보드 📈')
     st.write("이 페이지에서는 주식 코드와 예측 기간을 입력하여 해당 주식의 향후 가격을 예측합니다.")
@@ -218,9 +226,8 @@ def stock_prediction_dashboard():
 
     if submit_button:
         try:
-            # 주식 데이터 불러오기 (최근 3년, 1일 단위)
-            stock = yf.Ticker(stock_symbol)
-            data = stock.history(period="5y", interval="1d")  # 1일 단위로 최근 3년 데이터 가져오기
+            # 주식 데이터 불러오기 (최근 5년, 1일 단위)
+            data = get_stock_data(stock_symbol)
 
             # 데이터가 비어 있을 경우 예외 처리
             if data.empty:
@@ -249,26 +256,58 @@ def stock_prediction_dashboard():
             # 음수 예측 값을 0으로 변환
             forecast['yhat'] = forecast['yhat'].apply(lambda x: max(x, 0))
 
-            # 예측 결과 시각화
-            st.subheader('예측 결과 그래프')
-            plt.rcParams['font.family'] = 'Malgun Gothic'  # Windows 환경에서 한글 폰트 설정
-            plt.figure(figsize=(12, 6))
-            plt.plot(prophet_data['ds'], prophet_data['y'], label='실제 가격', color='blue')
-            plt.plot(forecast['ds'], forecast['yhat'], label='예측 가격', color='red')
-            plt.xlabel('날짜')
-            plt.ylabel('가격')
-            plt.legend()
-            plt.grid(True, linestyle='--', alpha=0.6)
-            st.pyplot(plt)
+            # 캔들 차트 및 예측 결과 시각화
+            st.subheader('캔들 차트 및 예측 결과')
+            fig = go.Figure()
 
+            # 캔들차트 추가
+            fig.add_trace(go.Candlestick(
+                x=data.index,
+                open=data['Open'],
+                high=data['High'],
+                low=data['Low'],
+                close=data['Close'],
+                name='캔들 차트'
+            ))
+
+            # 예측 라인 추가
+            fig.add_trace(go.Scatter(
+                x=forecast['ds'],
+                y=forecast['yhat'],
+                mode='lines',
+                name='예측 가격',
+                line=dict(color='red', width=2)
+            ))
+
+            # 주식 실시간 가격 업데이트 및 차이 표시
+            current_price = data['Close'][-1]
+            predicted_price = forecast['yhat'].iloc[-1]
+            price_difference = predicted_price - current_price
+            price_color = 'red' if price_difference > 0 else 'blue'
+
+            st.markdown(f"### {stock_symbol} 실시간 가격: ${current_price:.2f}")
+            st.markdown(f"### 예측 가격과의 차이: <span style='color:{price_color};'>${price_difference:.2f}</span>", unsafe_allow_html=True)
+
+            # 차트 레이아웃 설정 및 출력
+            fig.update_layout(
+                title=f'{stock_symbol} 주가 및 예측 결과',
+                xaxis_title='날짜',
+                yaxis_title='가격',
+                xaxis_rangeslider_visible=False
+            )
+
+            st.plotly_chart(fig)
+
+            # 관련 뉴스 출력
             col1, col2 = st.columns([0.3, 0.7])
-    
             with col1:
                 # 예측 결과 출력 (예측한 기간만)
                 st.subheader('예측 결과 데이터')
                 future_predictions = forecast[['ds', 'yhat']].tail(prediction_period)
                 future_predictions.columns = ['날짜', '예측 가격']
                 st.dataframe(future_predictions)
+
+
             with col2:
                 if len(related_word) > 1:
                     df_related = data_load(None, related_word)
@@ -278,13 +317,13 @@ def stock_prediction_dashboard():
                     for i, (index, row) in enumerate(category_news.iterrows()):
                         st.markdown(f"<div style='margin-bottom: 10px;'><strong>{i + 1}. <a href='{row['url']}' target='_blank'>{row['title']}</a></strong> 🌐 {row['publisher']}</div>", unsafe_allow_html=True)
                 else:
-                    st.subheader('📰 주요 뉴스')
+                    st.subheader('🗅 주요 뉴스')
 
         except Exception as e:
             st.error(f"오류가 발생했습니다: {str(e)}")
             st.write('연관어가 입력되지 않았습니다.')
 
-def main():
+def daily_news_dashboard():
     # 페이지 기본 설정
     # st.set_page_config(layout='wide', page_title='데일리 뉴스 리포트 대시보드', page_icon='📊')
     st.title('데일리 뉴스 리포트 대시보드 📊')
@@ -503,14 +542,144 @@ def main():
                     else:
                         st.warning('워드 네트워크를 생성하기에 충분한 데이터가 없습니다.')
 
-if __name__ == "__main__":
-    # main()
-
+# 메인 함수
+def main():
     st.set_page_config(layout='wide', page_title='종합 대시보드', page_icon='📊')
-    st.sidebar.title('📊 대시보드 메뉴')
-    page = st.sidebar.radio("이동할 페이지를 선택하세요:", ('데일리 뉴스 리포트', '주가 예측 대시보드'))
+    query_params = st.query_params
+    page = query_params.get('page', [None])
 
-    if page == '데일리 뉴스 리포트':
-        main()
-    elif page == '주가 예측 대시보드':
+    if page == [None]:
+        st.markdown(
+            """
+            <style>
+            @import url('https://fonts.googleapis.com/css?family=Lato:100,300,400');
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            .button-container-2 {
+                position: relative;
+                width: 48%;
+                height: 100px;
+                margin: 2%;
+                overflow: hidden;
+                border: 1px solid #000;
+                font-family: 'Lato', sans-serif;
+                font-weight: 300;
+                transition: 0.5s;
+                letter-spacing: 1px;
+                border-radius: 8px;
+            }
+
+            .button-container-2 button {
+                width: 100%;
+                height: 100%;
+                font-family: 'Lato', sans-serif;
+                font-weight: 300;
+                font-size: 20px;
+                letter-spacing: 1px;
+                font-weight: bold;
+                background: #000;
+                -webkit-mask: url('https://raw.githubusercontent.com/robin-dela/css-mask-animation/master/img/urban-sprite.png');
+                mask: url('https://raw.githubusercontent.com/robin-dela/css-mask-animation/master/img/urban-sprite.png');
+                -webkit-mask-size: 3000% 100%;
+                mask-size: 3000% 100%;
+                border: none;
+                color: #fff;
+                cursor: pointer;
+                -webkit-animation: ani2 0.7s steps(29) forwards;
+                animation: ani2 0.7s steps(29) forwards;
+            }
+
+            .button-container-2 button:hover {
+                -webkit-animation: ani 0.7s steps(29) forwards;
+                animation: ani 0.7s steps(29) forwards;
+            }
+
+            .mas {
+                position: absolute;
+                color: #000;
+                text-align: center;
+                width: 100%;
+                font-family: 'Lato', sans-serif;
+                font-weight: 300;
+                font-size: 20px;
+                margin-top: 30px;
+                overflow: hidden;
+                font-weight: bold;
+            }
+
+            @-webkit-keyframes ani {
+                from {
+                    -webkit-mask-position: 0 0;
+                    mask-position: 0 0;
+                }
+                to {
+                    -webkit-mask-position: 100% 0;
+                    mask-position: 100% 0;
+                }
+            }
+
+            @keyframes ani {
+                from {
+                    -webkit-mask-position: 0 0;
+                    mask-position: 0 0;
+                }
+                to {
+                    -webkit-mask-position: 100% 0;
+                    mask-position: 100% 0;
+                }
+            }
+
+            @-webkit-keyframes ani2 {
+                from {
+                    -webkit-mask-position: 100% 0;
+                    mask-position: 100% 0;
+                }
+                to {
+                    -webkit-mask-position: 0 0;
+                    mask-position: 0 0;
+                }
+            }
+
+            @keyframes ani2 {
+                from {
+                    -webkit-mask-position: 100% 0;
+                    mask-position: 100% 0;
+                }
+                to {
+                    -webkit-mask-position: 0 0;
+                    mask-position: 0 0;
+                }
+            }
+            </style>
+            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <div class="button-container-2">
+                    <a href="?page=daily_news">
+                    <span class="mas">데일리 뉴스 리포트</span>
+                    <button type="button" onclick="location.href='?page=daily_news'">데일리 뉴스 리포트</button>
+                    </a>
+                </div>
+                <div class="button-container-2">
+                    <a href="?page=stock_prediction">
+                    <span class="mas">주가 예측 대시보드</span>
+                    <button type="button" onclick="location.href='?page=stock_prediction'">주가 예측 대시보드</button>
+                    </a>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    if page == 'daily_news':
+        st.markdown("<style>.button-container-2 { display: none; }</style>", unsafe_allow_html=True)
+        daily_news_dashboard()
+        st.sidebar.button("🏠 홈으로 돌아가기", on_click=lambda: st.query_params.update(page=None))
+    elif page == 'stock_prediction':
+        st.markdown("<style>.button-container-2 { display: none; }</style>", unsafe_allow_html=True)
         stock_prediction_dashboard()
+        st.sidebar.button("🏠 홈으로 돌아가기", on_click=lambda: st.query_params.update(page=None))
+
+if __name__ == "__main__":
+    main()

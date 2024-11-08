@@ -211,7 +211,7 @@ def collect_news_by_category(category):
         time.sleep(3)
 
         try:
-            for _ in range(50):
+            for _ in range(20):
                 driver.find_element(By.CSS_SELECTOR, 'a.section_more_inner').click()
                 time.sleep(1)
         except:
