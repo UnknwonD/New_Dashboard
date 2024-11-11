@@ -18,7 +18,10 @@ from gensim.models import Word2Vec
 from transformers import BertTokenizerFast, BertForSequenceClassification
 import torch
 
-stopwords = ['대하', '때문', '경우', '그리고', '그러나', '하지만', '또한', '또는', '따라서', '그래서', '하지만', '이', '그', '저', '것', '수', '등', '및', '을', '를', '은', '는', '이', '가', '에', '와', '과', '에서', '이다', '있다', '없다', '되다', '하다', '않다', '같다', '때문에', '위해', '대한', '여러', '모든', '어떤', '하면', '그러면']
+stopwords = ['대하', '때문', '경우', '그리고', '그러나', '하지만', '또한', '또는', '따라서', 
+             '그래서', '하지만', '이', '그', '저', '것', '수', '등', '및', '을', '를', '은', '는', '이', 
+             '가', '에', '와', '과', '에서', '이다', '있다', '없다', '되다', '하다', '않다', '같다', '때문에',
+            '위해', '대한', '여러', '모든', '어떤', '하면', '그러면', '연합뉴스']
 
 # 토크나이저와 모델 로드
 tokenizer = BertTokenizerFast.from_pretrained("sangrimlee/bert-base-multilingual-cased-nsmc")
@@ -46,15 +49,6 @@ def analyze_sentiment(text):
     else:
         return '긍정'
 
-# # Sentiment analysis function
-# def analyze_sentiment(text):
-#     analysis = TextBlob(text)
-#     if analysis.sentiment.polarity > 0:
-#         return '긍정'
-#     elif analysis.sentiment.polarity == 0:
-#         return '중립'
-#     else:
-#         return '부정'
 
 @st.cache_data
 def create_wordcloud(text):
@@ -361,6 +355,7 @@ def daily_news_dashboard():
             st.sidebar.subheader("🔥 실시간 인기 단어 TOP 10")
             all_tokens = []
             kiwi = Kiwi()
+            ##################################################################################################################################
             for sublist in df['sentences']:
                 for sentence in sublist:
                     for word in sentence:
@@ -368,8 +363,9 @@ def daily_news_dashboard():
                         if analyzed:
                             morphs = analyzed[0][0]
                             for token in morphs:
-                                if token.tag.startswith('N') and len(token.form) > 1:
+                                if token.tag.startswith('N') and len(token.form) > 1 and token.tag == "NNP":
                                     all_tokens.append(token.form)
+            ##################################################################################################################################
             word_count = Counter(all_tokens)
             word_count_df = pd.DataFrame(word_count.items(), columns=['Word', 'Count']).sort_values(by='Count', ascending=False).head(10)
             for i, (index, row) in enumerate(word_count_df.iterrows()):
@@ -407,6 +403,16 @@ def daily_news_dashboard():
                         # 분야별 긍/부정 비율 시각화
                         st.subheader('📊 분야별 긍정/부정 비율')
                         df['sentiment'] = df['content'].apply(lambda x: analyze_sentiment(' '.join(x)))
+                        
+                        ##################################################################################################################################
+                        with engine.connect() as conn:
+                            for i, row in df.iterrows():
+                                # Assuming there's an identifier or column you can match on (e.g., 'id')
+                                sql = text("UPDATE social_data SET sentiment = :sentiment WHERE seq = :seq")
+                                conn.execute(sql, {"sentiment": row['sentiment'], "seq": row['seq']})
+                            conn.commit()
+                        ##################################################################################################################################
+
                         sentiment_category_df = df.groupby(['category', 'sentiment']).size().reset_index(name='count')
                         sentiment_chart = alt.Chart(sentiment_category_df).mark_bar().encode(
                             x=alt.X('count', title='Count'),
@@ -436,6 +442,7 @@ def daily_news_dashboard():
                     # 워드 클라우드 및 주요 단어 분석
                     with cloud_network_col1:
                         st.subheader('🔍 워드 클라우드')
+                        ##################################################################################################################################
                         tokens = []
                         for sublist in filtered_data['sentences']:
                             for sentence in sublist:
@@ -449,6 +456,7 @@ def daily_news_dashboard():
                                         if token.tag.startswith('N') and len(token.form) > 1 and token.form not in stopwords:
                                             tokens.append(token.form)
                         all_text = ' '.join(tokens)
+                        ##################################################################################################################################
                         wordcloud_fig = create_wordcloud(all_text)
                         st.pyplot(wordcloud_fig)
 
@@ -473,8 +481,10 @@ def daily_news_dashboard():
                     # 긍정, 부정 평가 시각화
                     with pos_neg_col1:
                         st.subheader('📊 긍/부정 비율')
+                        ##################################################################################################################################
                         sentiments = filtered_data['content'].apply(lambda x: analyze_sentiment(' '.join(x)))
                         filtered_data['sentiment'] = sentiments
+                        ##################################################################################################################################
                         sentiment_counts = sentiments.value_counts().to_dict()
                         sentiment_df = pd.DataFrame(list(sentiment_counts.items()), columns=['Sentiment', 'Count'])
                         pie_chart = alt.Chart(sentiment_df).mark_arc(innerRadius=50).encode(
@@ -503,6 +513,7 @@ def daily_news_dashboard():
 
                     with pos_neg_word_col1:
                         st.subheader('💬 긍정 뉴스에서 가장 많이 발생한 단어')
+                        ##################################################################################################################################
                         positive_tokens = []
                         for sublist in positive_data['sentences']:
                             for sentence in sublist:
@@ -513,12 +524,14 @@ def daily_news_dashboard():
                                         for token in morphs:
                                             if token.tag.startswith('N') and len(token.form) > 1 and token.form not in stopwords:
                                                 positive_tokens.append(token.form)
+                        ##################################################################################################################################
                         positive_word_count = Counter(positive_tokens)
                         positive_word_count_df = pd.DataFrame(positive_word_count.items(), columns=['Word', 'Count']).sort_values(by='Count', ascending=False).head(10)
                         st.table(positive_word_count_df)
 
                     with pos_neg_word_col2:
                         st.subheader('💬 부정 뉴스에서 가장 많이 발생한 단어')
+                        ##################################################################################################################################
                         negative_tokens = []
                         for sublist in negative_data['sentences']:
                             for sentence in sublist:
@@ -529,6 +542,7 @@ def daily_news_dashboard():
                                         for token in morphs:
                                             if token.tag.startswith('N') and len(token.form) > 1 and token.form not in stopwords:
                                                 negative_tokens.append(token.form)
+                        ##################################################################################################################################
                         negative_word_count = Counter(negative_tokens)
                         negative_word_count_df = pd.DataFrame(negative_word_count.items(), columns=['Word', 'Count']).sort_values(by='Count', ascending=False).head(10)
                         st.table(negative_word_count_df)
@@ -543,12 +557,11 @@ def daily_news_dashboard():
                         st.warning('워드 네트워크를 생성하기에 충분한 데이터가 없습니다.')
 
 # 메인 함수
-def main():
-    st.set_page_config(layout='wide', page_title='종합 대시보드', page_icon='📊')
+def main_dashboard():
     query_params = st.query_params
-    page = query_params.get('page', [None])
+    page = query_params.get('page', 'main')
 
-    if page == [None]:
+    if page == 'main':
         st.markdown(
             """
             <style>
@@ -674,12 +687,186 @@ def main():
 
     if page == 'daily_news':
         st.markdown("<style>.button-container-2 { display: none; }</style>", unsafe_allow_html=True)
+        st.session_state.logged_in = True
         daily_news_dashboard()
-        st.sidebar.button("🏠 홈으로 돌아가기", on_click=lambda: st.query_params.update(page=None))
+        st.sidebar.button("🏠 홈으로 돌아가기", on_click=lambda: st.query_params.update(page='main'))
+        st.session_state.logged_in = True
     elif page == 'stock_prediction':
         st.markdown("<style>.button-container-2 { display: none; }</style>", unsafe_allow_html=True)
         stock_prediction_dashboard()
-        st.sidebar.button("🏠 홈으로 돌아가기", on_click=lambda: st.query_params.update(page=None))
+        st.sidebar.button("🏠 홈으로 돌아가기", on_click=lambda: st.query_params.update(page='main'))
 
-if __name__ == "__main__":
-    main()
+import re
+
+def login():
+    st.set_page_config(layout='wide', page_title='로그인', page_icon='\U0001F512')
+
+    # 로그인 입력 필드 및 스타일
+    st.markdown(
+        """
+        <style>
+        @import url('https://fonts.googleapis.com/css?family=Lato:100,300,400');
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: #050801;
+            font-family: 'Lato', sans-serif;
+            font-weight: bold;
+            color: #ffffff;
+        }
+        .login-container {
+            text-align: center;
+            width: 300px;
+            padding: 40px;
+            background: #333;
+            border-radius: 10px;
+            box-shadow: 0 0 20px #000;
+        }
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border: none;
+            font-size: 16px;
+        }
+        button {
+            padding: 10px 20px;
+            margin-top: 20px;
+            background: #03e9f4;
+            color: #050801;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        button:hover {
+            background: #0298b9;
+        }
+        </style>
+        """, unsafe_allow_html=True
+    )
+
+    # 로그인 폼 생성
+    with st.form("login"):
+        input_username = st.text_input("아이디를 입력하세요", key="input_username")
+        input_password = st.text_input("비밀번호를 입력하세요", type="password", key="input_password")
+        login_btn = st.form_submit_button("로그인")
+
+    if login_btn:
+        if input_username and input_password:
+            if check_user(input_username, input_password):
+                # 로그인 성공 시 세션 상태 업데이트 및 페이지 전환
+                st.session_state.username = input_username
+                st.session_state.logged_in = True
+                st.rerun()
+            else:
+                # 로그인 실패
+                st.error("아이디 또는 비밀번호가 틀렸습니다.")
+        else:
+            st.error("아이디와 비밀번호를 입력해주세요.")
+
+    # 회원가입 버튼 추가
+    if st.button("회원가입"):
+        st.session_state.page = "register"
+        st.rerun()
+
+
+def register_user():
+    st.subheader("회원가입")
+    with st.form('register'):
+        register_username = st.text_input("아이디를 입력하세요", key="register_username")
+        register_password = st.text_input("비밀번호를 입력하세요", type="password", key="register_password")
+        register_email = st.text_input("이메일을 입력하세요", key="register_email")
+        email_req = st.checkbox("메일 수신 여부", key="email_req")
+
+        submit = st.form_submit_button("회원가입하기")
+
+    if submit:
+        if not register_username or not register_password or not register_email:
+            st.error("모든 필드를 입력해주세요.")
+            return
+
+        # 아이디 중복 체크
+        if user_exists(register_username):
+            st.error("이미 사용 중인 아이디입니다.")
+            return
+
+        # 비밀번호 유효성 검사 (5자 이상, 영문과 숫자가 모두 포함)
+        if len(register_password) < 5 or not re.search("[a-zA-Z]", register_password) or not re.search("[0-9]", register_password):
+            st.error("비밀번호는 5자 이상이며, 영문과 숫자가 모두 포함되어야 합니다.")
+            return
+
+        # 이메일 형식 유효성 검사
+        if not re.match(r"[^@\s]+@[^@\s]+\.[^@\s]+", register_email):
+            st.error("올바른 이메일 형식을 입력해주세요.")
+            return
+
+        # 회원 정보 저장 (예: 데이터베이스에 추가)
+        if save_user(register_username, register_password, register_email, email_req):
+            st.success("회원가입이 완료되었습니다. 이제 로그인해 주세요.")
+            st.session_state.page = "login"
+            st.rerun()
+
+
+def check_user(input_username, input_password):
+    query = text("SELECT COUNT(*) FROM user_table WHERE id = :username AND password = :password")
+
+    with engine.connect() as conn:
+        result = conn.execute(query, {"username": input_username, "password": input_password}).scalar()
+        return result > 0  # Returns True if the user exists, otherwise False
+
+
+def user_exists(username):
+    query = text("SELECT COUNT(*) FROM user_table WHERE id = :username")
+
+    with engine.connect() as conn:
+        result = conn.execute(query, {"username": username}).scalar()
+        return result > 0
+
+
+def save_user(username, password, email, email_req):
+    email_req = 1 if email_req else 0
+    try:
+        with engine.connect() as conn:
+            query = text("INSERT INTO user_table(id, password, email, email_req) VALUES(:username, :password, :email, :email_req)")
+            conn.execute(query, {"username": username,
+                                 "password": password,
+                                 "email": email,
+                                 "email_req": email_req})
+            conn.commit()
+        return True
+    except Exception as e:
+        st.error("회원가입에 실패하였습니다. 입력정보를 다시 확인해주세요.")
+        print(e)
+        return False
+
+
+# Streamlit 실행
+if __name__ == '__main__':
+    engine = create_engine(db_url)
+
+    if 'logged_in' not in st.session_state:
+        st.session_state.logged_in = False
+        st.session_state.username = None
+        st.session_state.page = "login"
+
+    if st.session_state.page == "login":
+        if not st.session_state.logged_in:
+            login()
+        else:
+            st.success(f"안녕하세요, {st.session_state.username}님!")
+            # main_dashboard() 함수 호출 (메인 대시보드 화면)
+            main_dashboard()
+
+    elif st.session_state.page == "register":
+        register_user()

@@ -195,11 +195,11 @@ def str_to_date(phrase):
     
     return result_time.strftime('%Y-%m-%d %H:%M')
 
-def collect_news_by_category(category):
+def collect_news_by_category(category, engine):
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
     kiwi = Kiwi(num_workers=5)
     start_time = datetime.now()
-    engine = create_engine(db_url)
+    # engine = create_engine(db_url)
 
     collected_rows = []  # Collect rows before inserting to DB
 
@@ -211,7 +211,7 @@ def collect_news_by_category(category):
         time.sleep(3)
 
         try:
-            for _ in range(20):
+            for _ in range(100):
                 driver.find_element(By.CSS_SELECTOR, 'a.section_more_inner').click()
                 time.sleep(1)
         except:
@@ -306,11 +306,17 @@ def collect_news_by_category(category):
     print(f'카테고리 {category} 수집 완료 - 시작시간: {start_time}, 종료시간: {datetime.now()} 성공: {success_cnt} 중복: {duplicate_cnt}, 오류: {error_cnt}')
 
 
+def preprocess_data(engine):
+    ...
+
 def main():
     while True:
+        engine = create_engine(db_url)
         categories = [100, 101, 102, 103, 104]
         for category in categories:
-            collect_news_by_category(category)
+            collect_news_by_category(category, engine)
+        
+        preprocess_data(engine)
         
         print('5시간 뒤에 다시 수집합니다.')
         time.sleep(18000)
