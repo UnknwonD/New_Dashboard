@@ -3,15 +3,14 @@ from sqlalchemy import create_engine, text
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from email.mime.application import MIMEApplication
 import datetime
 import os
 from api import db_url, sender_email, sender_password, smtp_server, smtp_port
-from kiwipiepy import Kiwi
 from collections import Counter
 import schedule
 import time
 import ast
+import re
 
 def send_email(subject, body, recipients):
     msg = MIMEMultipart()
@@ -64,31 +63,28 @@ def data_load(target_date):
     df['content'] = df['content'].apply(ast.literal_eval)
     df['sentences'] = df['sentences'].apply(ast.literal_eval)
     
-    
     return df
 
 # 뉴스 데이터 분석
-def analyze_news_data(df):
-    # 형태소 분석기
-    kiwi = Kiwi(load_default_dict=True)
-    all_tokens = []
-    for sublist in df['sentences']:
-        for sentence in sublist:
-            for word in sentence:
-                analyzed = kiwi.analyze(word)
-                if analyzed:
-                    morphs = analyzed[0][0]
-                    for token in morphs:
-                        if token.tag == 'NNP' and len(token.form) > 1:  # NNP 태그만 사용하여 의미있는 단어만 추출
-                            all_tokens.append(token.form)
+def analyze_news_data(df:pd.DataFrame):
+    # 모든 키워드 데이터 모으기
+    all_keywords = []
+    for keywords in df['keywords']:
+        all_keywords.extend(keywords.split(", "))
 
-    # 단어 빈도 계산 및 데이터프레임 생성
-    word_count = Counter(all_tokens)
-    word_count_df = pd.DataFrame(word_count.items(), columns=['Word', 'Count']).sort_values(by='Count', ascending=False).head(10)
-    return word_count_df
+    # 나라와 지역명 제거
+    news = list(set(tuple(df['publisher'].to_list())))
+    exclude_keywords = {"한국", "미국", "중국", "서울", "대전", "부산", "경기", "대구", "인천", "광주", "울산", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주"}
+    filtered_keywords = [kw for kw in all_keywords if kw not in exclude_keywords and kw not in news]
+
+
+    # 키워드 빈도 계산 및 데이터프레임 생성
+    keyword_count = Counter(filtered_keywords)
+    keyword_count_df = pd.DataFrame(keyword_count.items(), columns=['Keyword', 'Count']).sort_values(by='Count', ascending=False).head(10)
+    return keyword_count_df
 
 # 메일 내용 생성
-def create_email_content(df, word_count_df):
+def create_email_content(df, keyword_count_df):
     content = f"데일리 뉴스 리포트: {datetime.datetime.now().strftime('%Y년 %m월 %d일')}\n"
     content += "\n📰 주요 뉴스:\n"
     categories = df['category'].unique()
@@ -98,49 +94,48 @@ def create_email_content(df, word_count_df):
         for _, row in category_news.iterrows():
             content += f"- {row['title']} ({row['publisher']})\n  [링크]({row['url']})\n"
 
-    content += "\n🔥 실시간 인기 단어 TOP 10:\n"
-    for i, (index, row) in enumerate(word_count_df.iterrows()):
-        content += f"{i + 1}. {row['Word']} - {row['Count']}회\n"
-
+    content += "\n🔥 실시간 인기 키워드 TOP 10:\n"
+    
+    for i, (index, row) in enumerate(keyword_count_df.iterrows()):
+        content += f"\n{i + 1}. 📌 {row['Keyword']}\n"
+        
+        # 해당 키워드가 포함된 긍정 및 부정 뉴스 2개씩 추가
+        keyword_df = df[df['title'].str.contains(row['Keyword'])]
+        positive_news = keyword_df[keyword_df['sentiment'] == '긍정'].head(2)
+        negative_news = keyword_df[keyword_df['sentiment'] == '부정'].head(2)
+        
+        content += "\n  ➕ 긍정 뉴스:\n"
+        for _, news_row in positive_news.iterrows():
+            content += f"    - {news_row['title']} ({news_row['publisher']})\n      [링크]({news_row['url']})\n"
+        
+        content += "\n  ➖ 부정 뉴스:\n"
+        for _, news_row in negative_news.iterrows():
+            content += f"    - {news_row['title']} ({news_row['publisher']})\n      [링크]({news_row['url']})\n"
+        
     return content
 
-# 메일 발송 작업 스케줄링 함수
-def schedule_email():
+# 메일 발송 작업 함수
+def send_email_now():
     target_date = datetime.datetime.now() - datetime.timedelta(days=1)  # 어제 날짜 기준
     df = data_load(target_date)
 
     if not df.empty:
-        word_count_df = analyze_news_data(df)
-        email_content = create_email_content(df, word_count_df)
+        keyword_count_df = analyze_news_data(df)
+        email_content = create_email_content(df, keyword_count_df)
 
         recipients = ["daeho5000@ajou.ac.kr"]  # 수신자 리스트
         send_email("데일리 뉴스 리포트", email_content, recipients)
     else:
         print("선택한 날짜에 해당하는 데이터가 없습니다.")
 
-# 테스트 메일 발송 함수
-def test_email():
-    target_date = datetime.datetime.now() - datetime.timedelta(days=1)  # 어제 날짜 기준
-    df = data_load(target_date)
-
-    if not df.empty:
-        word_count_df = analyze_news_data(df)
-        email_content = create_email_content(df, word_count_df)
-
-        recipients = ["daeho5000@ajou.ac.kr", ""]  # 테스트 수신자 리스트
-        send_email("테스트: 데일리 뉴스 리포트", email_content, recipients)
-    else:
-        print("선택한 날짜에 해당하는 데이터가 없습니다.")
-
 # 매일 오전 9시에 이메일 발송하도록 스케줄 설정
-schedule.every().day.at("09:00").do(schedule_email)
+schedule.every().day.at("09:00").do(send_email_now)
 
 # 스케줄러 실행 및 테스트 모드 선택
 if __name__ == "__main__":
-    mode = input("실행 모드를 선택하세요 (1: 테스트 메일 발송, 2: 실제 스케줄 실행): ")
-    if mode == '1':
-        test_email()
-    elif mode == '2':
-        while True:
-            schedule.run_pending()
-            time.sleep(60)
+    # 테스트 실행 시 즉시 이메일 발송
+    send_email_now()
+    
+    while True:
+        schedule.run_pending()
+        time.sleep(60)
