@@ -160,7 +160,7 @@ def data_load(target_date, word_like = None):
         sql = f'''
         SELECT * 
         FROM social_data 
-        WHERE url IS NOT NULL 
+        WHERE url IS NOT NULL and sentiment is not null and keywords is not null
         AND DATE(date) = '{target_date.strftime('%Y-%m-%d')}'
         '''
 
@@ -178,6 +178,7 @@ def data_load(target_date, word_like = None):
     # content와 sentences를 리스트 타입으로 변환
     df['content'] = df['content'].apply(ast.literal_eval)
     df['sentences'] = df['sentences'].apply(ast.literal_eval)
+    df['keywords'] = df['keywords'].apply(lambda x: x.split(','))
     
     return df
 
@@ -323,18 +324,20 @@ def daily_news_dashboard():
     st.title('데일리 뉴스 리포트 대시보드 📊')
 
     # 사이드바 및 페이지 제목
-    st.sidebar.title('데일리 뉴스 리포트')
-    st.sidebar.subheader("데이터 선택")
-    selected_date = st.sidebar.date_input('날짜 선택', pd.Timestamp('today'))
+    with st.sidebar.form(key='news_filter_form'):
+        st.subheader("데이터 선택")
+        selected_date = st.date_input('날짜 선택', pd.Timestamp('today'))
 
-    # 사이드바 - 특정 단어 필터링 기능
-    st.sidebar.subheader("🔍 특정 단어로 기사 필터링")
-    filter_keywords = st.sidebar.text_area("검색할 단어들을 입력하세요 (쉼표로 구분):")
-    filter_keywords = [word.strip() for word in filter_keywords.split(',') if word.strip()]  # 쉼표로 구분된 단어 리스트로 변환
-    reset_filter = st.sidebar.button("🔄 필터 초기화")
+        # 사이드바 - 특정 단어 필터링 기능
+        st.subheader("🔍 특정 단어로 기사 필터링")
+        filter_keywords = st.text_area("검색할 단어들을 입력하세요 (쉼표로 구분):")
+        filter_keywords = [word.strip() for word in filter_keywords.split(',') if word.strip()]  # 쉼표로 구분된 단어 리스트로 변환
+
+        # 폼 제출 버튼
+        submitted = st.form_submit_button("🔄 필터 적용")
 
     # 데이터 불러오기
-    if selected_date:
+    if submitted:
         df = data_load(selected_date)
         if df.empty:
             st.warning("선택한 날짜에 해당하는 데이터가 없습니다.")
@@ -343,29 +346,15 @@ def daily_news_dashboard():
             if filter_keywords:
                 df = df[df['content'].apply(lambda x: any(keyword in ' '.join(x) for keyword in filter_keywords))]
 
-            if reset_filter:
-                filter_keywords = []  # 필터 초기화
-
             st.title(f"📍 {selected_date.strftime('%Y년 %m월 %d일')} 데일리 뉴스 리포트")
             # 탭 구조로 뉴스 세부 정보 표시 (탭을 상단에 배치)
             tab_labels = ['메인', '정치', '경제', '사회', '생활/문화', 'IT/과학']
             tabs = st.tabs(tab_labels)
 
             # 사이드바 - 실시간 WORDCOUNT TOP 10 단어
-            st.sidebar.subheader("🔥 실시간 인기 단어 TOP 10")
-            all_tokens = []
-            kiwi = Kiwi()
-            ##################################################################################################################################
-            for sublist in df['sentences']:
-                for sentence in sublist:
-                    for word in sentence:
-                        analyzed = kiwi.analyze(word)
-                        if analyzed:
-                            morphs = analyzed[0][0]
-                            for token in morphs:
-                                if token.tag.startswith('N') and len(token.form) > 1 and token.tag == "NNP":
-                                    all_tokens.append(token.form)
-            ##################################################################################################################################
+            st.sidebar.subheader("🔥 실시간 단어 TOP 10")
+            all_tokens = df['keywords'].to_list()
+            all_tokens = sum(all_tokens, [])
             word_count = Counter(all_tokens)
             word_count_df = pd.DataFrame(word_count.items(), columns=['Word', 'Count']).sort_values(by='Count', ascending=False).head(10)
             for i, (index, row) in enumerate(word_count_df.iterrows()):
@@ -402,17 +391,6 @@ def daily_news_dashboard():
 
                         # 분야별 긍/부정 비율 시각화
                         st.subheader('📊 분야별 긍정/부정 비율')
-                        df['sentiment'] = df['content'].apply(lambda x: analyze_sentiment(' '.join(x)))
-                        
-                        ##################################################################################################################################
-                        with engine.connect() as conn:
-                            for i, row in df.iterrows():
-                                # Assuming there's an identifier or column you can match on (e.g., 'id')
-                                sql = text("UPDATE social_data SET sentiment = :sentiment WHERE seq = :seq")
-                                conn.execute(sql, {"sentiment": row['sentiment'], "seq": row['seq']})
-                            conn.commit()
-                        ##################################################################################################################################
-
                         sentiment_category_df = df.groupby(['category', 'sentiment']).size().reset_index(name='count')
                         sentiment_chart = alt.Chart(sentiment_category_df).mark_bar().encode(
                             x=alt.X('count', title='Count'),
@@ -441,6 +419,7 @@ def daily_news_dashboard():
 
                     # 워드 클라우드 및 주요 단어 분석
                     with cloud_network_col1:
+                        kiwi = Kiwi()
                         st.subheader('🔍 워드 클라우드')
                         ##################################################################################################################################
                         tokens = []
@@ -482,9 +461,10 @@ def daily_news_dashboard():
                     with pos_neg_col1:
                         st.subheader('📊 긍/부정 비율')
                         ##################################################################################################################################
-                        sentiments = filtered_data['content'].apply(lambda x: analyze_sentiment(' '.join(x)))
-                        filtered_data['sentiment'] = sentiments
+                        # sentiments = filtered_data['content'].apply(lambda x: analyze_sentiment(' '.join(x)))
+                        # filtered_data['sentiment'] = sentiments
                         ##################################################################################################################################
+                        sentiments = filtered_data['sentiment']
                         sentiment_counts = sentiments.value_counts().to_dict()
                         sentiment_df = pd.DataFrame(list(sentiment_counts.items()), columns=['Sentiment', 'Count'])
                         pie_chart = alt.Chart(sentiment_df).mark_arc(innerRadius=50).encode(
@@ -514,16 +494,8 @@ def daily_news_dashboard():
                     with pos_neg_word_col1:
                         st.subheader('💬 긍정 뉴스에서 가장 많이 발생한 단어')
                         ##################################################################################################################################
-                        positive_tokens = []
-                        for sublist in positive_data['sentences']:
-                            for sentence in sublist:
-                                for word in sentence:
-                                    analyzed = kiwi.analyze(word)
-                                    if analyzed:
-                                        morphs = analyzed[0][0]
-                                        for token in morphs:
-                                            if token.tag.startswith('N') and len(token.form) > 1 and token.form not in stopwords:
-                                                positive_tokens.append(token.form)
+                        positive_tokens = positive_data['keywords'].to_list()
+                        positive_tokens = sum(positive_tokens, [])
                         ##################################################################################################################################
                         positive_word_count = Counter(positive_tokens)
                         positive_word_count_df = pd.DataFrame(positive_word_count.items(), columns=['Word', 'Count']).sort_values(by='Count', ascending=False).head(10)
@@ -532,16 +504,8 @@ def daily_news_dashboard():
                     with pos_neg_word_col2:
                         st.subheader('💬 부정 뉴스에서 가장 많이 발생한 단어')
                         ##################################################################################################################################
-                        negative_tokens = []
-                        for sublist in negative_data['sentences']:
-                            for sentence in sublist:
-                                for word in sentence:
-                                    analyzed = kiwi.analyze(word)
-                                    if analyzed:
-                                        morphs = analyzed[0][0]
-                                        for token in morphs:
-                                            if token.tag.startswith('N') and len(token.form) > 1 and token.form not in stopwords:
-                                                negative_tokens.append(token.form)
+                        negative_tokens = negative_data['keywords'].to_list()
+                        negative_tokens = sum(negative_tokens, [])
                         ##################################################################################################################################
                         negative_word_count = Counter(negative_tokens)
                         negative_word_count_df = pd.DataFrame(negative_word_count.items(), columns=['Word', 'Count']).sort_values(by='Count', ascending=False).head(10)
