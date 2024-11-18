@@ -151,10 +151,9 @@ def data_load(target_date, word_like = None):
         sql = f'''
         SELECT * 
         FROM social_data 
-        WHERE url IS NOT NULL 
+        WHERE url IS NOT NULL and sentiment is not null and keywords is not null
         AND title like '%{word_like}%'
         ORDER BY seq DESC
-        LIMIT 10
         ''' 
     else:
         sql = f'''
@@ -200,13 +199,75 @@ from sklearn.preprocessing import MinMaxScaler
 from prophet import Prophet
 import streamlit as st
 
+import openai
+from langchain.prompts import PromptTemplate
+from langchain.chat_models import ChatOpenAI
 
 # 주식 데이터 가져오기 함수
 def get_stock_data(stock_symbol, period="5y", interval="1d"):
     stock = yf.Ticker(stock_symbol)
     return stock.history(period=period, interval=interval)
 
-# Streamlit 주가 예측 대시보드
+
+# 템플릿 정의
+report_template = """
+주가 예측 보고서
+
+주식 이름: {stock_symbol}
+
+1. 최근 5일 주가 데이터:
+{recent_prices}
+
+2. 모델 예측 가격 (근 5일 + 이후 5일):
+{predicted_prices}
+
+3. 키워드 관련 뉴스 타이틀 20개:
+{related_news}
+
+4. 전체 긍정, 부정 비율:
+긍정적 뉴스 비율: {positive_ratio}%
+부정적 뉴스 비율: {negative_ratio}%
+
+위의 정보를 기반으로 다음과 같은 내용을 추가하여 분석 리포트를 작성해주세요.
+투자 방향성 제시 목적으로 작성되므로, 그와 관련된 우려는 하지 않아도 될 것 같아.
+내가 부탁하는 정보들을 그대로 정리해서 출력해줘
+
+1. 주식의 최근 추세와 관련된 간단한 요약 작성.
+2. 최근 주가 데이터를 기반으로 주요 변동 요인 설명.
+3. 긍정적/부정적 뉴스 비율이 주가에 미친 영향을 분석.
+4. 향후 주가 변동에 대해 투자자들이 유의해야 할 점을 제시.
+5. 제공된 데이터를 기반으로 투자자들에게 권장할 수 있는 전략 제안.
+6. 앞으로 주가의 방향성 예측
+7. 투자 방향성 최종 정리 및 제안
+"""
+
+# LangChain Prompt 설정
+template = PromptTemplate(
+    input_variables=["stock_symbol", "recent_prices", "predicted_prices", "related_news", "positive_ratio", "negative_ratio"],
+    template=report_template,
+)
+
+# LangChain Prompt 설정
+template = PromptTemplate(
+    input_variables=["stock_symbol", "recent_prices", "predicted_prices", "related_news", "positive_ratio", "negative_ratio"],
+    template=report_template,
+)
+
+# LLMChain 생성
+def generate_analysis_report(stock_symbol, recent_prices, predicted_prices, related_news, positive_ratio, negative_ratio):
+    llm = ChatOpenAI(model_name="gpt-4")
+    response = llm.predict(
+        template.format(
+            stock_symbol=stock_symbol,
+            recent_prices=recent_prices,
+            predicted_prices=predicted_prices,
+            related_news=related_news,
+            positive_ratio=positive_ratio,
+            negative_ratio=negative_ratio
+        )
+    )
+    return response
+
 def stock_prediction_dashboard():
     st.title('주가 예측 대시보드 📈')
     st.write("이 페이지에서는 주식 코드와 예측 기간을 입력하여 해당 주식의 향후 가격을 예측합니다.")
@@ -302,21 +363,47 @@ def stock_prediction_dashboard():
                 future_predictions.columns = ['날짜', '예측 가격']
                 st.dataframe(future_predictions)
 
-
+            related_news_titles = ""
             with col2:
                 if len(related_word) > 1:
                     df_related = data_load(None, related_word)
 
                     st.markdown(f"### 🌐 {related_word} 관련 뉴스")
-                    category_news = df_related.tail(10)
+                    category_news = df_related.tail(20)
                     for i, (index, row) in enumerate(category_news.iterrows()):
+                        related_news_titles += f"{i + 1}. {row['title']}\n"
                         st.markdown(f"<div style='margin-bottom: 10px;'><strong>{i + 1}. <a href='{row['url']}' target='_blank'>{row['title']}</a></strong> 🌐 {row['publisher']}</div>", unsafe_allow_html=True)
                 else:
                     st.subheader('🗅 주요 뉴스')
 
+            sentiment_counts = df_related['sentiment'].value_counts()
+            positive_ratio = (sentiment_counts.get('긍정', 0) / sentiment_counts.sum()) * 100
+            negative_ratio = (sentiment_counts.get('부정', 0) / sentiment_counts.sum()) * 100
+
+            # 최근 5일 주가 데이터 가져오기
+            recent_prices = data[['Close']].tail(5).to_string(index=False)
+
+            # 예측 가격 데이터 (근 5일 + 이후 5일)
+            predicted_prices = future_predictions.to_string(index=False)
+
+            # 분석 리포트 생성
+            report = generate_analysis_report(stock_symbol, recent_prices, predicted_prices, related_news_titles, positive_ratio, negative_ratio)
+
+            # 분석 리포트 출력
+            st.subheader("📊 주가 예측 분석 리포트")
+            st.markdown(
+                f"""
+                <div style="background-color: #f9f9f9; padding: 15px; border-radius: 10px;">
+                    <p style="font-size: 16px; line-height: 1.6;">{report}</p>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
         except Exception as e:
             st.error(f"오류가 발생했습니다: {str(e)}")
             st.write('연관어가 입력되지 않았습니다.')
+
 
 def daily_news_dashboard():
     # 페이지 기본 설정
