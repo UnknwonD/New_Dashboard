@@ -13,6 +13,7 @@ import streamlit.components.v1 as components
 import ast
 from sqlalchemy import create_engine, text
 from api import db_url
+from api import *
 from gensim.models import Word2Vec
 
 from transformers import BertTokenizerFast, BertForSequenceClassification
@@ -52,7 +53,6 @@ def analyze_sentiment(text):
 
 @st.cache_data
 def create_wordcloud(text):
-    # Use font_path to correctly display Korean text, words are horizontal only
     wordcloud = WordCloud(width=1500, height=1200, background_color='white', font_path='malgun.ttf', prefer_horizontal=1.0).generate(text)
     fig, ax = plt.subplots()
     ax.imshow(wordcloud, interpolation='bilinear')
@@ -69,7 +69,6 @@ def find_similar_words(word, model, topn=3):
 
 @st.cache_data
 def train_word2vec_model(sentences):
-    # Train a Word2Vec model
     model = Word2Vec(sentences, vector_size=100, window=5, min_count=2, workers=4)
     return model
 
@@ -83,21 +82,17 @@ def visualize_main_word_network(category, top_keywords, w2v_model):
                 layout=True,
                 neighborhood_highlight=True)
     
-    # Add main node for the category
     net.add_node(category, label=category, size=30, color='red')
     
-    # Add nodes for top keywords and connect them to the category node
     for keyword in top_keywords:
         net.add_node(keyword, label=keyword, size=20, color='lightblue', shape='circle')
         net.add_edge(category, keyword, color='gray')
         
-        # Find related words for each keyword
         similar_words = find_similar_words(keyword, w2v_model, topn=3)
         for similar_word in similar_words:
             net.add_node(similar_word, label=similar_word, size=15, color='lightgreen', shape='circle')
             net.add_edge(keyword, similar_word, color='lightgray')
     
-    # Ensure the output directory exists
     output_dir = "output"
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -111,26 +106,21 @@ def visualize_main_word_network(category, top_keywords, w2v_model):
 def visualize_expanded_word_network(main_word, w2v_model):
     net = Network(notebook=False, height='600px', width='100%', bgcolor='#ffffff', font_color='black', layout=True)
     
-    # Add main node for the selected word
     net.add_node(main_word, label=main_word, size=30, color='red', physics=False)
     
-    # Find similar words and add to the network
     try:
         similar_words = w2v_model.wv.most_similar(main_word, topn=10)
         for similar_word, similarity in similar_words:
             net.add_node(similar_word, label=similar_word, size=20, color='lightgreen', physics=False)
             net.add_edge(main_word, similar_word, value=similarity, color='gray', physics=False)
             
-            # Find similar words of similar words (2nd level)
             similar_words_level_2 = w2v_model.wv.most_similar(similar_word, topn=5)
             for sub_word, sub_similarity in similar_words_level_2:
                 net.add_node(sub_word, label=sub_word, size=10, color='lightyellow', physics=False)
                 net.add_edge(similar_word, sub_word, value=sub_similarity, color='lightgray', physics=False)
     except KeyError:
-        # Skip if the keyword is not in the vocabulary
         pass
     
-    # Ensure the output directory exists
     output_dir = "output"
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -140,7 +130,6 @@ def visualize_expanded_word_network(main_word, w2v_model):
     with open(output_path, 'r', encoding='utf-8') as HtmlFile:
         return HtmlFile.read()
 
-# Load or create dataframe
 @st.cache_data
 def data_load(target_date, word_like = None):
     # 데이터베이스 엔진 생성
@@ -369,7 +358,7 @@ def stock_prediction_dashboard():
                     df_related = data_load(None, related_word)
 
                     st.markdown(f"### 🌐 {related_word} 관련 뉴스")
-                    category_news = df_related.tail(20)
+                    category_news = df_related.tail(10)
                     for i, (index, row) in enumerate(category_news.iterrows()):
                         related_news_titles += f"{i + 1}. {row['title']}\n"
                         st.markdown(f"<div style='margin-bottom: 10px;'><strong>{i + 1}. <a href='{row['url']}' target='_blank'>{row['title']}</a></strong> 🌐 {row['publisher']}</div>", unsafe_allow_html=True)

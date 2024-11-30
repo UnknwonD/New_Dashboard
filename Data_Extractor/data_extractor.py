@@ -202,7 +202,7 @@ def collect_news_by_category(category, engine):
     start_time = datetime.now()
     # engine = create_engine(db_url)
 
-    collected_rows = []  # Collect rows before inserting to DB
+    collected_rows = [] 
 
     for sub in CATEGORY[category]:
         base_url = 'https://news.naver.com/breakingnews/section/' + str(category) + '/' + sub
